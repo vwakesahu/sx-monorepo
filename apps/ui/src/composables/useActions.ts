@@ -195,7 +195,8 @@ export function useActions() {
     }
 
     const network = getReadWriteNetwork(networkId);
-    return network.actions.predictSpaceAddress(auth.value.provider, { salt });
+    return '0x8Fdb26641d14a80FCCBE87BF455338Dd9C539a50';
+    // return network.actions.predictSpaceAddress(auth.value.provider, { salt });
   }
 
   async function deployDependency(

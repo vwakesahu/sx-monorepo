@@ -11,6 +11,7 @@ import {
   EvmNetworkConfig,
   evmOptimism,
   evmPolygon,
+  evmRivest,
   evmSepolia,
   getEvmStrategy
 } from '@snapshot-labs/sx';
@@ -60,7 +61,8 @@ const CONFIGS: Record<number, EvmNetworkConfig> = {
   8453: evmBase,
   42161: evmArbitrum,
   1: evmMainnet,
-  11155111: evmSepolia
+  11155111: evmSepolia,
+  9000: evmRivest
 };
 
 export function createActions(

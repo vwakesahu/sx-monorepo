@@ -28,6 +28,16 @@ import IHGlobeAlt from '~icons/heroicons-outline/globe-alt';
 const IPFS_GATEWAY: string =
   import.meta.env.VITE_IPFS_GATEWAY || 'https://cloudflare-ipfs.com';
 const ADDABLE_NETWORKS = {
+  9000: {
+    chainName: 'Rivest',
+    nativeCurrency: {
+      name: 'TEVMOS',
+      symbol: 'TEVMOS',
+      decimals: 18
+    },
+    rpcUrls: ['http://localhost:8545'],
+    blockExplorerUrls: ['https://explorer.rivest.inco.org/']
+  }
   //   12345: {
   //     chainName: 'My network name',
   //     nativeCurrency: {

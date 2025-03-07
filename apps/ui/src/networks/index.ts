@@ -15,6 +15,7 @@ const mantleNetwork = createEvmNetwork('mnt');
 const optimismNetwork = createEvmNetwork('oeth');
 const ethereumNetwork = createEvmNetwork('eth');
 const sepoliaNetwork = createEvmNetwork('sep');
+const rivestNetwork = createEvmNetwork('rivest');
 
 export const enabledNetworks: NetworkID[] = import.meta.env
   .VITE_ENABLED_NETWORKS
@@ -30,7 +31,8 @@ export const enabledNetworks: NetworkID[] = import.meta.env
       'oeth',
       'sep',
       'sn',
-      'sn-sep'
+      'sn-sep',
+      'rivest'
     ];
 
 export const evmNetworks: NetworkID[] = [
@@ -40,7 +42,8 @@ export const evmNetworks: NetworkID[] = [
   'mnt',
   'base',
   'oeth',
-  'sep'
+  'sep',
+  'rivest'
 ];
 export const offchainNetworks: NetworkID[] = ['s', 's-tn'];
 export const starknetNetworks: NetworkID[] = ['sn', 'sn-sep'];
@@ -60,6 +63,7 @@ export const getNetwork = (id: NetworkID) => {
   if (id === 'mnt') return mantleNetwork;
   if (id === 'oeth') return optimismNetwork;
   if (id === 'eth') return ethereumNetwork;
+  if (id === 'rivest') return rivestNetwork;
   if (id === 'sep') return sepoliaNetwork;
   if (id === 'sn') return starknetNetwork;
   if (id === 'sn-sep') return starknetSepoliaNetwork;

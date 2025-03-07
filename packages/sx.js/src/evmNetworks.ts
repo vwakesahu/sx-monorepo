@@ -106,6 +106,7 @@ function createEvmConfig(
 export const evmNetworks = {
   eth: createStandardConfig(1),
   oeth: createStandardConfig(10),
+  rivest: createStandardConfig(9000),
   sep: createStandardConfig(11155111, {
     // executionStrategies: {
     //   Axiom: '0xaC6dbd42Ed254E9407fe0D2798784d0110979DC2',
@@ -128,3 +129,4 @@ export const evmPolygon = createEvmConfig('matic');
 export const evmArbitrum = createEvmConfig('arb1');
 export const evmBase = createEvmConfig('base');
 export const evmMantle = createEvmConfig('mnt');
+export const evmRivest = createEvmConfig('rivest');

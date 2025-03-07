@@ -7,7 +7,8 @@ const UNISWAP_CHAINS_BY_NETWORK = {
   '56': 'bnb',
   '43114': 'avalanche',
   '42220': 'celo',
-  '11155111': 'sepolia'
+  '11155111': 'sepolia',
+  '9000': 'rivest'
 };
 
 export function getSwapLink(

@@ -76,6 +76,16 @@ export const METADATA: Record<string, Metadata> = {
       'ipfs://bafkreid7ndxh6y2ljw2jhbisodiyrhcy2udvnwqgon5wgells3kh4si5z4',
     blockTime: ETH_MAINNET_BLOCK_TIME
   },
+  rivest: {
+    name: 'RIVEST',
+    chainId: 9000,
+    apiUrl:
+      import.meta.env.VITE_EVM_SEPOLIA_API ??
+      'https://subgrapher.snapshot.org/subgraph/arbitrum/3682UpSJVQ89v6BMSzxDSiQWZKa3Hbn6RKucpT8jZ5nT',
+    avatar:
+      'ipfs://bafkreieujavke7ekurzmxt6lbacdzw34z2lxbfvaq3gdn7fvqxbmdorquy',
+    blockTime: 3
+  },
   sep: {
     name: 'Ethereum Sepolia',
     chainId: 11155111,
@@ -145,6 +155,7 @@ export function createEvmNetwork(networkId: NetworkID): Network {
     supportsSimulation: [
       'eth',
       'sep',
+      'rivest',
       'oeth',
       'matic',
       'base',

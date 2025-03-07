@@ -24,6 +24,7 @@ export type NetworkID =
   | 'base'
   | 'mnt'
   | 'sep'
+  | 'rivest'
   | 'sn'
   | 'sn-sep';
 
