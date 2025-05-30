@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { getCacheHash } from '@/helpers/utils';
 import { NetworkID } from '@/types';
+import { computed } from 'vue';
 
 defineOptions({ inheritAttrs: false });
 
@@ -11,6 +12,7 @@ const props = withDefaults(
       avatar: string;
       network: NetworkID;
       active_proposals: number | null;
+      spaceContractAddress?: string;
     };
     size?: number;
     showActiveProposals?: boolean;
@@ -22,13 +24,20 @@ const props = withDefaults(
 );
 
 const cb = computed(() => getCacheHash(props.space.avatar));
+
+const spaceId = computed(() => {
+  if (props.space.spaceContractAddress) {
+    return props.space.spaceContractAddress;
+  }
+  return `${props.space.network}:${props.space.id}`;
+});
 </script>
 
 <template>
   <div class="relative w-fit">
     <UiStamp
       v-bind="$attrs"
-      :id="`${space.network}:${space.id}`"
+      :id="spaceId"
       :size="size"
       :cb="cb"
       class="!bg-skin-bg"

@@ -11,7 +11,7 @@ const protocols = Object.values(explorePageProtocols).map(
     label
   })
 );
-const DEFAULT_PROTOCOL = 'snapshot';
+const DEFAULT_PROTOCOL = 'snapshot-x';
 
 const route = useRoute();
 const router = useRouter();

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ETH_CONTRACT } from '@/helpers/constants';
 import { _c, _n, sanitizeUrl, shorten } from '@/helpers/utils';
-import { enabledNetworks, evmNetworks, getNetwork } from '@/networks';
+import { getEnabledNetworks, evmNetworks, getNetwork } from '@/networks';
 import {
   ChainId,
   Contact,
@@ -12,7 +12,7 @@ import {
 
 const STAKING_CHAIN_IDS: ChainId[] = [1, 11155111];
 const EVM_CHAIN_IDS: ChainId[] = evmNetworks
-  .filter(network => enabledNetworks.includes(network))
+  .filter(network => getEnabledNetworks().includes(network))
   .map(network => getNetwork(network).chainId);
 
 const props = defineProps<{

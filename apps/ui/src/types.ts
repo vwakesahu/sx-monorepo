@@ -22,6 +22,7 @@ export type NetworkID =
   | 'arb1'
   | 'oeth'
   | 'base'
+  | 'base-sep'
   | 'mnt'
   | 'ape'
   | 'curtis'

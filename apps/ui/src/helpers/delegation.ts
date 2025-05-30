@@ -1,11 +1,11 @@
-import { enabledNetworks, evmNetworks } from '@/networks';
+import { getEnabledNetworks, evmNetworks } from '@/networks';
 import { METADATA } from '@/networks/starknet';
 import { ChainId, NetworkID } from '@/types';
 
 export function getDelegationNetwork(chainId: ChainId) {
   // NOTE: any EVM network can be used for delegation on EVMs (it will switch chainId as needed).
   // This will also support networks that are not supported natively.
-  const evmNetwork = enabledNetworks.find(networkId =>
+  const evmNetwork = getEnabledNetworks().find(networkId =>
     evmNetworks.includes(networkId)
   );
 

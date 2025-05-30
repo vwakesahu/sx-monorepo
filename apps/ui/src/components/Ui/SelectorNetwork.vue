@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { getUrl } from '@/helpers/utils';
-import { enabledNetworks, getNetwork } from '@/networks';
+import { getEnabledNetworks, getNetwork } from '@/networks';
 import { METADATA as STARKNET_NETWORK_METADATA } from '@/networks/starknet';
 import { BaseDefinition, NetworkID } from '@/types';
 
@@ -68,7 +68,7 @@ const options = computed(() => {
     ];
   }
 
-  return enabledNetworks
+  return getEnabledNetworks()
     .map(id => {
       const { name, readOnly, avatar } = getNetwork(id);
 

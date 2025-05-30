@@ -3,6 +3,16 @@ import { shorten } from '@/helpers/utils';
 import { getNetwork } from '@/networks';
 import { Connector, ConnectorType, StrategyConfig } from '@/networks/types';
 import { NetworkID, SpaceMetadata, SpaceSettings } from '@/types';
+import { toHex } from 'viem';
+import {
+  SPACE_CONTRACT,
+  VANILLA_AUTHENTICATOR,
+  VANILLA_PROPOSAL_VALIDATION_STRATEGY,
+  VANILLA_VOTING_STRATEGY,
+  VANILLA_EXECUTION_STRATEGY
+} from '@/contracts/contract-info';
+import { createPublicClient, createWalletClient, custom, http } from 'viem';
+import { baseSepolia } from 'viem/chains';
 
 type DeployingDependencyStep = {
   id: `DEPLOYING_DEPS_${number}`;
@@ -61,6 +71,15 @@ const connectorCallbackFn: Ref<((value: Connector | false) => void) | null> =
 const txIds = ref({});
 const deployedExecutionStrategies = ref([] as StrategyConfig[]);
 const executionStrategiesDestinations = ref([] as string[]);
+const confirming = ref(false);
+const progressSteps = ref([
+  { label: 'Deploying Timelock execution strategy', status: 'pending' },
+  { label: 'Deploying space', status: 'pending' },
+  { label: 'Indexing space', status: 'pending' }
+]);
+const deployedAddresses = ref({});
+const isWalletConnecting = ref(false);
+const walletConnectMessage = ref('');
 
 const network = computed(() => getNetwork(props.networkId));
 const steps = computed<Step[]>(() => {
@@ -120,6 +139,30 @@ function handleConnectorClose() {
   connectorModalOpen.value = false;
 }
 
+async function deployContract({ abi, bytecode, args = [] }) {
+  // Setup your wallet and public client as needed
+  const publicClient = createPublicClient({
+    chain: baseSepolia,
+    transport: http('https://sepolia.base.org')
+  });
+  const walletClient = createWalletClient({
+    chain: baseSepolia,
+    transport: custom(window.ethereum)
+  });
+  const [account] = await walletClient.getAddresses();
+
+  const txHash = await walletClient.deployContract({
+    account,
+    abi,
+    bytecode,
+    args
+  });
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash: txHash
+  });
+  return receipt.contractAddress;
+}
+
 async function deployStep(
   step: DeployingDependencyStep | AddingDependencyStep | DeployingSpaceStep
 ) {
@@ -135,29 +178,59 @@ async function deployStep(
       : network.value.managerConnectors;
 
   if (!auth.value || !supportedConnectors.includes(auth.value.connector.type)) {
+    isWalletConnecting.value = true;
+    walletConnectMessage.value = 'Connecting wallet...';
     const selectedConnector = await getConnector(supportedConnectors);
-    if (!selectedConnector) throw new Error('No connector selected');
-
+    if (!selectedConnector) {
+      isWalletConnecting.value = false;
+      throw new Error('No connector selected');
+    }
     await login(selectedConnector);
+    isWalletConnecting.value = false;
+    walletConnectMessage.value = '';
+  } else {
+    // Even if already connected, ensure wallet is unlocked and available
+    if (window.ethereum && !window.ethereum.selectedAddress) {
+      isWalletConnecting.value = true;
+      walletConnectMessage.value = 'Connecting wallet...';
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      isWalletConnecting.value = false;
+      walletConnectMessage.value = '';
+    }
   }
 
   let result;
   if (step.id === 'DEPLOYING_SPACE') {
-    const executionStrategies = deployedExecutionStrategies.value;
-    const executionDestinations = executionStrategiesDestinations.value;
-
-    result = await createSpace(
-      props.networkId,
-      props.salt,
-      props.metadata,
-      props.settings,
-      props.authenticators,
-      props.validationStrategy,
-      props.votingStrategies,
-      executionStrategies,
-      executionDestinations,
-      props.controller
-    );
+    // Deploy all contracts and store addresses
+    const spaceContract = await deployContract({
+      abi: SPACE_CONTRACT.abi,
+      bytecode: SPACE_CONTRACT.bytecode
+    });
+    const vanillaAuthenticator = await deployContract({
+      abi: VANILLA_AUTHENTICATOR.abi,
+      bytecode: VANILLA_AUTHENTICATOR.bytecode
+    });
+    const vanillaProposalValidationStrategy = await deployContract({
+      abi: VANILLA_PROPOSAL_VALIDATION_STRATEGY.abi,
+      bytecode: VANILLA_PROPOSAL_VALIDATION_STRATEGY.bytecode
+    });
+    const vanillaVotingStrategy = await deployContract({
+      abi: VANILLA_VOTING_STRATEGY.abi,
+      bytecode: VANILLA_VOTING_STRATEGY.bytecode
+    });
+    const vanillaExecutionStrategy = await deployContract({
+      abi: VANILLA_EXECUTION_STRATEGY.abi,
+      bytecode: VANILLA_EXECUTION_STRATEGY.bytecode,
+      args: [props.controller, 1]
+    });
+    deployedAddresses.value = {
+      spaceContract,
+      vanillaAuthenticator,
+      vanillaProposalValidationStrategy,
+      vanillaVotingStrategy,
+      vanillaExecutionStrategy
+    };
+    return; // No need to process result/txId for this step
   } else {
     result = await deployDependency(
       props.networkId,
@@ -227,12 +300,17 @@ function getStepNetwork(step: Step) {
 
   return network.value;
 }
-
-onMounted(() => deploy());
 </script>
 
 <template>
   <div class="pt-5 max-w-[50rem] mx-auto px-4">
+    <div
+      v-if="isWalletConnecting"
+      class="flex items-center justify-center py-8"
+    >
+      <UiLoading class="mr-2" />
+      <span>{{ walletConnectMessage }}</span>
+    </div>
     <h1>Create new space</h1>
     <div>Do not refresh this page until process is complete.</div>
 

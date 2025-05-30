@@ -2,6 +2,7 @@
 import { _n } from '@/helpers/utils';
 import { offchainNetworks } from '@/networks';
 import { RelatedSpace, Space } from '@/types';
+import { computed } from 'vue';
 
 const props = withDefaults(
   defineProps<{
@@ -10,12 +11,28 @@ const props = withDefaults(
   }>(),
   { showAbout: true }
 );
-const compositeSpaceId = `${props.space.network}:${props.space.id}`;
+
+// Handle both API spaces and local spaces
+const spaceRoute = computed(() => {
+  // For local spaces, use the spaceContractAddress
+  if (props.space.spaceContractAddress) {
+    return {
+      name: 'space-overview',
+      params: { space: props.space.spaceContractAddress }
+    };
+  }
+  // For API spaces, use the composite ID
+  const compositeSpaceId = `${props.space.network}:${props.space.id}`;
+  return {
+    name: 'space-overview',
+    params: { space: compositeSpaceId }
+  };
+});
 </script>
 
 <template>
   <AppLink
-    :to="{ name: 'space-overview', params: { space: compositeSpaceId } }"
+    :to="spaceRoute"
     class="text-skin-text border rounded-lg block relative group overflow-hidden h-[186px]"
     :class="{ 'h-[280px]': showAbout }"
   >

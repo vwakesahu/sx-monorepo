@@ -33,6 +33,7 @@ export const CHAIN_IDS: Record<Exclude<NetworkID, 's' | 's-tn'>, ChainId> = {
   oeth: 10,
   matic: 137,
   base: 8453,
+  'base-sep': 84532,
   arb1: 42161,
   mnt: 5000,
   ape: 33139,
@@ -198,3 +199,7 @@ export const VALIDATION_TYPES_INFO: Record<
 export const LAST_USED_CONNECTOR_CACHE_KEY = 'connector';
 
 export const RECENT_CONNECTOR = 'recent-connector';
+
+export const DEFAULT_PROTOCOL = 'snapshot-x';
+export const DEFAULT_NETWORK = 'all';
+export const DEFAULT_CATEGORY = 'all';

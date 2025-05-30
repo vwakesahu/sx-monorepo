@@ -17,36 +17,56 @@ const ethereumNetwork = createEvmNetwork('eth');
 const apeNetwork = createEvmNetwork('ape');
 const curtisNetwork = createEvmNetwork('curtis');
 const sepoliaNetwork = createEvmNetwork('sep');
+const baseSepoliaNetwork = createEvmNetwork('base-sep');
 
-export const enabledNetworks: NetworkID[] = import.meta.env
-  .VITE_ENABLED_NETWORKS
-  ? (import.meta.env.VITE_ENABLED_NETWORKS.split(',') as NetworkID[])
-  : [
-      's',
-      's-tn',
-      'eth',
-      'matic',
-      'arb1',
-      'base',
-      'mnt',
-      'oeth',
-      'ape',
-      'curtis',
-      'sep',
-      'sn',
-      'sn-sep'
-    ];
+const DEFAULT_NETWORKS: NetworkID[] = [
+  's',
+  // 's-tn',
+  // 'eth',
+  // 'matic',
+  // 'arb1',
+  // 'base',
+  'base-sep'
+  // 'mnt',
+  // 'oeth',
+  // 'ape',
+  // 'curtis',
+  // 'sep',
+  // 'sn',
+  // 'sn-sep'
+];
+
+interface ImportMetaEnv {
+  VITE_ENABLED_NETWORKS?: string;
+  VITE_METADATA_NETWORK?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+export function getEnabledNetworks(): NetworkID[] {
+  try {
+    const envNetworks = import.meta.env.VITE_ENABLED_NETWORKS;
+    return envNetworks
+      ? (envNetworks.split(',') as NetworkID[])
+      : DEFAULT_NETWORKS;
+  } catch {
+    return DEFAULT_NETWORKS;
+  }
+}
 
 export const evmNetworks: NetworkID[] = [
-  'eth',
-  'matic',
-  'arb1',
-  'mnt',
-  'base',
-  'oeth',
-  'ape',
-  'curtis',
-  'sep'
+  // 'eth',
+  // 'matic',
+  // 'arb1',
+  // 'mnt',
+  // 'base',
+  'base-sep'
+  // 'oeth',
+  // 'ape',
+  // 'curtis',
+  // 'sep'
 ];
 export const offchainNetworks: NetworkID[] = ['s', 's-tn'];
 export const starknetNetworks: NetworkID[] = ['sn', 'sn-sep'];
@@ -55,7 +75,7 @@ export const metadataNetwork: NetworkID =
   import.meta.env.VITE_METADATA_NETWORK || 's';
 
 export const getNetwork = (id: NetworkID) => {
-  if (!enabledNetworks.includes(id))
+  if (!getEnabledNetworks().includes(id))
     throw new Error(`Network ${id} is not enabled`);
 
   if (id === 's') return snapshotNetwork;
@@ -71,6 +91,7 @@ export const getNetwork = (id: NetworkID) => {
   if (id === 'sep') return sepoliaNetwork;
   if (id === 'sn') return starknetNetwork;
   if (id === 'sn-sep') return starknetSepoliaNetwork;
+  if (id === 'base-sep') return baseSepoliaNetwork;
 
   throw new Error(`Unknown network ${id}`);
 };
@@ -82,9 +103,8 @@ export const getReadWriteNetwork = (id: NetworkID): ReadWriteNetwork => {
   return network;
 };
 
-export const enabledReadWriteNetworks: NetworkID[] = enabledNetworks.filter(
-  id => !getNetwork(id).readOnly
-);
+export const enabledReadWriteNetworks: NetworkID[] =
+  getEnabledNetworks().filter(id => !getNetwork(id).readOnly);
 
 /**
  * supportsNullCurrent return true if the network supports null current to be used for computing current voting power
@@ -100,19 +120,17 @@ export const explorePageProtocols: Record<ExplorePageProtocol, ProtocolConfig> =
     snapshot: {
       key: 'snapshot',
       label: 'Snapshot',
-      apiNetwork: metadataNetwork,
-      networks: [metadataNetwork],
+      apiNetwork: 'base-sep',
+      networks: ['base-sep'],
       limit: 18
     },
     'snapshot-x': {
       key: 'snapshot-x',
       label: 'Snapshot X',
-      apiNetwork:
-        enabledNetworks.find(network => !offchainNetworks.includes(network)) ||
-        'eth',
-      networks: enabledNetworks.filter(
-        network => !offchainNetworks.includes(network)
-      ),
+      apiNetwork: 'base-sep',
+      networks: ['base-sep'],
       limit: 18
     }
   };
+
+export const DEFAULT_PROTOCOL = 'snapshot-x';

@@ -40,6 +40,13 @@ router.beforeEach((to, _from, next) => {
 
   const [, space = '', ...rest] = to.path.split('/');
 
+  // Handle local spaces (contract addresses)
+  if (space.startsWith('0x')) {
+    const restPath = rest.length ? `/${rest.join('/')}` : '';
+    next({ path: `/s:${space}${restPath}`, replace: true });
+    return;
+  }
+
   let spaceName = space.startsWith(`${metadataNetwork}:`)
     ? space.substring(metadataNetwork.length + 1)
     : space;

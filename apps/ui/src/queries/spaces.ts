@@ -7,7 +7,11 @@ import {
 } from '@tanstack/vue-query';
 import { MaybeRefOrGetter } from 'vue';
 import { SPACE_CATEGORIES } from '@/helpers/constants';
-import { enabledNetworks, explorePageProtocols, getNetwork } from '@/networks';
+import {
+  getEnabledNetworks,
+  explorePageProtocols,
+  getNetwork
+} from '@/networks';
 import { ExplorePageProtocol, SpacesFilter } from '@/networks/types';
 import { NetworkID, Space } from '@/types';
 
@@ -16,7 +20,7 @@ type SpaceCategory = 'all' | (typeof SPACE_CATEGORIES)[number]['id'];
 // NOTE: this is used for followed spaces
 export async function getSpaces(filter?: SpacesFilter) {
   const results = await Promise.all(
-    enabledNetworks.map(async id => {
+    getEnabledNetworks().map(async id => {
       const network = getNetwork(id);
 
       const requestFilter = {

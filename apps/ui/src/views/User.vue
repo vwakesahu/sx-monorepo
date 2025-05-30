@@ -11,7 +11,7 @@ import {
   shortenAddress
 } from '@/helpers/utils';
 import { addressValidator as isValidAddress } from '@/helpers/validation';
-import { enabledNetworks, getNetwork } from '@/networks';
+import { getEnabledNetworks, getNetwork } from '@/networks';
 import { getSpaces } from '@/queries/spaces';
 import { Space, UserActivity } from '@/types';
 
@@ -87,7 +87,7 @@ async function loadActivities(userId: string) {
 
   try {
     const results = await Promise.all(
-      enabledNetworks.map(networkId =>
+      getEnabledNetworks().map(networkId =>
         getNetwork(networkId).api.loadUserActivities(userId)
       )
     );

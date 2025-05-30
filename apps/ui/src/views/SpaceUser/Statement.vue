@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { compareAddresses } from '@/helpers/utils';
-import { enabledNetworks, getNetwork, offchainNetworks } from '@/networks';
+import { getEnabledNetworks, getNetwork, offchainNetworks } from '@/networks';
 import { Space, Statement, User } from '@/types';
 import ICAgora from '~icons/c/agora';
 import ICKarmahq from '~icons/c/karmahq';
@@ -13,7 +13,7 @@ const SOURCE_ICONS = {
 };
 
 const offchainNetworkId = offchainNetworks.filter(network =>
-  enabledNetworks.includes(network)
+  getEnabledNetworks().includes(network)
 )[0];
 const offchainNetwork = getNetwork(offchainNetworkId);
 

@@ -4,7 +4,13 @@ import { NetworkID } from '@/types';
 
 const props = withDefaults(
   defineProps<{
-    space: { id: string; cover: string; avatar: string; network: NetworkID };
+    space: {
+      id: string;
+      cover: string;
+      avatar: string;
+      network: NetworkID;
+      spaceContractAddress?: string;
+    };
     size?: 'sm' | 'lg';
   }>(),
   { size: 'lg' }
@@ -14,12 +20,19 @@ const width = props.size === 'sm' ? 450 : 1500;
 const height = props.size === 'sm' ? 120 : 400;
 
 const cb = computed(() => getCacheHash(props.space.cover));
+
+const spaceId = computed(() => {
+  if (props.space.spaceContractAddress) {
+    return props.space.spaceContractAddress;
+  }
+  return `${props.space.network}:${props.space.id}`;
+});
 </script>
 
 <template>
   <UiStamp
     v-if="space.cover"
-    :id="`${space.network}:${space.id}`"
+    :id="spaceId"
     :width="width"
     :height="height"
     :cb="cb"
@@ -32,7 +45,7 @@ const cb = computed(() => getCacheHash(props.space.cover));
     :style="{
       'background-image': `url(${getStampUrl(
         'space',
-        `${space.network}:${space.id}`,
+        spaceId,
         50,
         getCacheHash(space.avatar)
       )}`,

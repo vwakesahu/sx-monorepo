@@ -1,18 +1,36 @@
 <script setup lang="ts">
-import { SPACE_CATEGORIES } from '@/helpers/constants';
-import { getUrl } from '@/helpers/utils';
-import { explorePageProtocols, getNetwork, metadataNetwork } from '@/networks';
-import { ExplorePageProtocol, ProtocolConfig } from '@/networks/types';
+import { getUrl } from '@snapshot-labs/snapshot.js/src/utils';
+import { computed, h, ref, watch, watchEffect, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import Combobox from '@/components/Combobox.vue';
+import OnboardingUser from '@/components/OnboardingUser.vue';
+import SpacesListItem from '@/components/SpacesListItem.vue';
+import UiButton from '@/components/Ui/Button.vue';
+import UiContainerInfiniteScroll from '@/components/Ui/ContainerInfiniteScroll.vue';
+import UiLabel from '@/components/Ui/Label.vue';
+import UiLoading from '@/components/Ui/Loading.vue';
+import UiSelectDropdown from '@/components/Ui/SelectDropdown.vue';
+import UiToolbarBottom from '@/components/Ui/ToolbarBottom.vue';
+import UiTooltip from '@/components/Ui/Tooltip.vue';
+import { useModal } from '@/composables/useModal';
+import { useWeb3 } from '@/composables/useWeb3';
+import {
+  categories,
+  DEFAULT_CATEGORY,
+  DEFAULT_NETWORK,
+  DEFAULT_PROTOCOL,
+  protocols,
+  SPACE_CATEGORIES,
+  SpaceCategory
+} from '@/helpers/constants';
+import { setTitle } from '@/helpers/metadata';
+import { explorePageProtocols, getNetwork } from '@/networks';
+import { ExplorePageProtocol } from '@/networks/types';
 import { useExploreSpacesQuery } from '@/queries/spaces';
-import { SelectItem } from '@/types';
 
 defineOptions({ inheritAttrs: false });
 
 type SpaceCategory = 'all' | (typeof SPACE_CATEGORIES)[number]['id'];
-
-const DEFAULT_PROTOCOL = 'snapshot';
-const DEFAULT_NETWORK = 'all';
-const DEFAULT_CATEGORY = 'all';
 
 const protocols = Object.values(explorePageProtocols).map(
   ({ key, label }: ProtocolConfig) => ({
@@ -48,48 +66,21 @@ const { data, fetchNextPage, hasNextPage, isPending, isFetchingNextPage } =
     category
   });
 
-const { networks: offchainNetworks } = useOffchainNetworksList(
-  metadataNetwork,
-  true
-);
-
 const networks = computed(() => {
   const explorePageNetworks = explorePageProtocols[protocol.value].networks;
 
-  let protocolNetworks: SelectItem<string>[] = [];
-  if (protocol.value === 'snapshot') {
-    protocolNetworks = offchainNetworks.value
-      .filter(network => {
-        return !(
-          metadataNetwork === 's' &&
-          'testnet' in network &&
-          network.testnet
-        );
+  const protocolNetworks = explorePageNetworks.map(networkId => {
+    const network = getNetwork(networkId);
+    return {
+      id: networkId,
+      name: network.name,
+      icon: h('img', {
+        src: getUrl(network.avatar),
+        alt: network.name,
+        class: 'rounded-full size-3.5'
       })
-      .map(network => ({
-        id: network.key,
-        name: network.name,
-        icon: h('img', {
-          src: getUrl(network.logo),
-          alt: network.name,
-          class: 'rounded-full size-3.5'
-        })
-      }));
-  } else {
-    protocolNetworks = explorePageNetworks.map(networkId => {
-      const network = getNetwork(networkId);
-
-      return {
-        id: networkId,
-        name: network.name,
-        icon: h('img', {
-          src: getUrl(network.avatar),
-          alt: network.name,
-          class: 'rounded-full size-3.5'
-        })
-      };
-    });
-  }
+    };
+  });
 
   return [{ id: 'all', name: 'All networks' }, ...protocolNetworks];
 });
@@ -147,6 +138,29 @@ watch(
 );
 
 watchEffect(() => setTitle('Explore'));
+
+// --- Custom localStorage spaces logic ---
+const localSpaces = ref([]);
+function normalize(str) {
+  return String(str).toLowerCase().replace(/[-_]/g, '');
+}
+function fuzzyMatch(a, b) {
+  const na = normalize(a);
+  const nb = normalize(b);
+  return na.includes(nb) || nb.includes(na);
+}
+onMounted(() => {
+  const data = localStorage.getItem('deployedContracts');
+  if (data) {
+    const parsed = JSON.parse(data);
+    const protocolQ = route.query.p || 'snapshot_x';
+    const networkQ = route.query.n || 'base-sepolia';
+    localSpaces.value = parsed.filter(
+      d => fuzzyMatch(d.protocol, protocolQ) && fuzzyMatch(d.network, networkQ)
+    );
+  }
+});
+// --- End custom localStorage spaces logic ---
 </script>
 
 <template>
@@ -198,16 +212,19 @@ watchEffect(() => setTitle('Explore'));
     <div class="flex-grow" v-bind="$attrs">
       <UiLabel label="Spaces" sticky />
       <UiLoading v-if="isPending" class="block m-4" />
-      <div v-else-if="data">
+      <div v-else>
         <UiContainerInfiniteScroll
-          v-if="data.pages.flat().length"
+          v-if="localSpaces.length || (data && data.pages.flat().length)"
           :loading-more="isFetchingNextPage"
           class="justify-center max-w-screen-md 2xl:max-w-screen-xl 3xl:max-w-screen-2xl mx-auto p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-explore-3 2xl:grid-cols-explore-4 3xl:grid-cols-explore-5 gap-3"
           @end-reached="handleEndReached"
         >
           <SpacesListItem
-            v-for="space in data.pages.flat()"
-            :key="space.id"
+            v-for="space in [
+              ...localSpaces,
+              ...(data ? data.pages.flat() : [])
+            ]"
+            :key="space.spaceContractAddress || space.id || space.createdAt"
             :space="space"
           />
         </UiContainerInfiniteScroll>

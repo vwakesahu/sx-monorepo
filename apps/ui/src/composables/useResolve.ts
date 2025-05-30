@@ -23,6 +23,16 @@ export function useResolve(id: Ref<string>) {
 
       resolved.value = false;
 
+      // Handle s: prefix for local spaces
+      if (id.startsWith('s:')) {
+        const contractAddress = id.substring(2);
+        // For local spaces, we don't need networkId since we'll load from localStorage
+        networkId.value = null;
+        address.value = contractAddress;
+        resolved.value = true;
+        return;
+      }
+
       const resolvedName = await resolver.resolveName(id);
       if (resolvedName) {
         networkId.value = resolvedName.networkId;

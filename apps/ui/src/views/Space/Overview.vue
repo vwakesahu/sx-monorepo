@@ -30,6 +30,9 @@ const showChildren = computed(
     props.space.children.every(child => child.name)
 );
 
+// Check if this is a local space
+const isLocalSpace = computed(() => !!props.space.spaceContractAddress);
+
 watchEffect(() => setTitle(props.space.name));
 </script>
 
@@ -49,7 +52,10 @@ watchEffect(() => setTitle(props.space.name));
           <UiButton
             :to="{
               name: 'space-editor',
-              params: { space: `${space.network}:${space.id}` }
+              params: {
+                space:
+                  space.spaceContractAddress || `${space.network}:${space.id}`
+              }
             }"
             class="!px-0 w-[46px]"
           >
@@ -129,6 +135,47 @@ watchEffect(() => setTitle(props.space.name));
               <component :is="social.icon" class="size-[26px]" />
             </a>
           </template>
+        </div>
+
+        <!-- Local Space Details -->
+        <div v-if="isLocalSpace" class="mt-4 p-4 bg-skin-border rounded-lg">
+          <h3 class="text-lg font-semibold mb-2">Contract Details</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p class="text-sm text-skin-text">Creator</p>
+              <p class="font-mono text-sm">{{ space.creatorAddress }}</p>
+            </div>
+            <div>
+              <p class="text-sm text-skin-text">Created At</p>
+              <p class="text-sm">
+                {{ new Date(space.createdAt).toLocaleString() }}
+              </p>
+            </div>
+            <div>
+              <p class="text-sm text-skin-text">Space Contract</p>
+              <p class="font-mono text-sm">{{ space.spaceContractAddress }}</p>
+            </div>
+            <div>
+              <p class="text-sm text-skin-text">Proposal Validation Strategy</p>
+              <p class="font-mono text-sm">
+                {{ space.proposalValidationStrategyAddress }}
+              </p>
+            </div>
+            <div>
+              <p class="text-sm text-skin-text">Voting Strategy</p>
+              <p class="font-mono text-sm">{{ space.votingStrategyAddress }}</p>
+            </div>
+            <div>
+              <p class="text-sm text-skin-text">Authenticator</p>
+              <p class="font-mono text-sm">{{ space.authenticatorAddress }}</p>
+            </div>
+            <div>
+              <p class="text-sm text-skin-text">Execution Strategy</p>
+              <p class="font-mono text-sm">
+                {{ space.executionStrategyAddress }}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

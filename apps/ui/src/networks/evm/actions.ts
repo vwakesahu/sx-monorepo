@@ -61,6 +61,7 @@ const CONFIGS: Record<number, EvmNetworkConfig> = {
   137: evmPolygon,
   5000: evmMantle,
   8453: evmBase,
+  84532: evmSepolia,
   42161: evmArbitrum,
   1: evmMainnet,
   33139: evmApe,
