@@ -29,7 +29,8 @@ export function useLocalSpace() {
             about: space.description,
             avatar: space.icon,
             cover: space.icon, // Use icon as cover for now
-            network: space.network,
+            network:
+              space.network === 'base-sepolia' ? 'base-sep' : space.network,
             proposal_count: 0,
             vote_count: 0,
             verified: false,
@@ -42,7 +43,11 @@ export function useLocalSpace() {
             authenticatorAddress: space.authenticatorAddress,
             executionStrategyAddress: space.executionStrategyAddress,
             creatorAddress: space.creatorAddress,
-            createdAt: space.createdAt
+            createdAt: space.createdAt,
+            treasuries: [], // Default empty array for treasuries
+            guidelines: '', // Default empty string for guidelines
+            voting_types: ['basic'],
+            privacy: 'none'
           };
         }
       }

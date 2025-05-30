@@ -457,7 +457,7 @@ watchEffect(() => {
 });
 </script>
 <template>
-  <div v-if="proposal" class="h-full">
+  <div v-if="proposal.value" class="h-full">
     <UiTopnav
       :class="{ 'maximum:border-l': isWhiteLabel }"
       class="maximum:border-r"

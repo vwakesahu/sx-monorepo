@@ -30,3 +30,9 @@ export const VANILLA_EXECUTION_STRATEGY = {
   abi: vanillaExecutionStrategy.abi,
   bytecode: vanillaExecutionStrategy.bytecode
 };
+
+const arr = JSON.parse(localStorage.getItem('deployedContracts') || '[]');
+arr.forEach(s => {
+  if (s.network === 'base-sepolia') s.network = 'base-sep';
+});
+localStorage.setItem('deployedContracts', JSON.stringify(arr, null, 2));
