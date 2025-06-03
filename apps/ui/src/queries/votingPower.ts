@@ -143,6 +143,24 @@ export function useProposalVotingPowerQuery(
 
       if (!proposalValue) return;
 
+      if (proposalValue.id && proposalValue.id.startsWith('local-')) {
+        return {
+          votingPowers: [
+            {
+              address: 'local',
+              value: 1n,
+              cumulativeDecimals: 0,
+              displayDecimals: 0,
+              token: null,
+              symbol: ''
+            }
+          ],
+          total: 1n,
+          canVote: true,
+          symbol: ''
+        };
+      }
+
       return getVotingPower(
         getProposalSnapshot(toValue(proposal)),
         {

@@ -97,7 +97,16 @@ const votingPower = computed(() => {
   // For local proposals, always return 1 voting power (not NaN)
   if (id.value && id.value.startsWith('local-')) {
     return {
-      votingPowers: [{ value: 1n }],
+      votingPowers: [
+        {
+          address: 'local',
+          value: 1n,
+          cumulativeDecimals: 0,
+          displayDecimals: 0,
+          token: null,
+          symbol: ''
+        }
+      ],
       total: 1n,
       canVote: true
     };
