@@ -44,29 +44,18 @@ const emit = defineEmits<{
   (e: 'close');
 }>();
 
-const isLoading = ref(false);
-const hasError = ref(false);
 const selectedValidation = ref(null as ValidationDetails | null);
 const form = ref({} as Record<string, any>);
 const rawParams = ref('{}');
 const customStrategies = ref([] as StrategyConfig[]);
 
-async function fetchValidations() {
-  if (isLoading.value || validations.value.length) return;
-
-  isLoading.value = true;
-  hasError.value = false;
-
-  try {
-    const response = await fetch(SCORE_API_URL);
-    validations.value = Object.values(await response.json());
-  } catch (e) {
-    console.log('failed to load validations', e);
-    hasError.value = true;
-  } finally {
-    isLoading.value = false;
+// Always set a default validation for local spaces
+validations.value = [
+  {
+    key: 'basic',
+    schema: null
   }
-}
+];
 
 const filteredValidations = computed(() => {
   const apiValidations = validations.value.filter(validation => {
@@ -233,7 +222,6 @@ watch(
   async value => {
     if (value) {
       selectedValidation.value = null;
-      await fetchValidations();
 
       if (props.current) {
         form.value = clone(props.current.params);
@@ -263,15 +251,7 @@ watch(
       </h3>
     </template>
     <div class="p-4 flex flex-col gap-2.5">
-      <UiLoading v-if="isLoading" class="m-auto" />
-      <div
-        v-else-if="hasError"
-        class="flex w-full justify-center items-center gap-2 text-skin-text"
-      >
-        <IH-exclamation-circle class="inline-block shrink-0" />
-        <span>Failed to load strategies.</span>
-      </div>
-      <div v-else-if="selectedValidation" class="s-box">
+      <div v-if="selectedValidation" class="s-box">
         <UiForm
           v-if="definition"
           v-model="form"

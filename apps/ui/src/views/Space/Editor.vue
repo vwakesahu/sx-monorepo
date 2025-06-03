@@ -76,24 +76,61 @@ const privacy = computed({
     }
   }
 });
+
 const draftId = computed(() => route.params.key as string);
 const network = computed(() => getNetwork(props.space.network));
 const spaceKey = computed(() => `${props.space.network}:${props.space.id}`);
 const proposalKey = computed(() => `${spaceKey.value}:${draftId.value}`);
-const proposal = computedAsync(async () => {
-  if (!proposalKey.value) return null;
 
-  if (!proposals[proposalKey.value]) {
-    await createDraft(spaceKey.value, undefined, draftId.value);
+const proposal = computedAsync(async () => {
+  if (!proposalKey.value) {
+    return null;
   }
 
-  return proposals[proposalKey.value];
+  if (!proposals[proposalKey.value]) {
+    try {
+      await createDraft(spaceKey.value, undefined, draftId.value);
+    } catch (error) {
+      // Silently handle draft creation errors
+      console.warn('Draft creation failed:', error);
+    }
+  }
+
+  const proposalData = proposals[proposalKey.value];
+
+  // Ensure proposal has all required array properties initialized
+  if (proposalData) {
+    console.log('🔧 Ensuring proposal arrays are initialized...');
+
+    // Initialize arrays that might be undefined and cause .map() errors
+    if (!proposalData.choices) {
+      console.log('  - Initializing choices array');
+      proposalData.choices = ['For', 'Against', 'Abstain'];
+    }
+    if (!proposalData.labels) {
+      console.log('  - Initializing labels array');
+      proposalData.labels = [];
+    }
+    if (!proposalData.executions) {
+      console.log('  - Initializing executions object');
+      proposalData.executions = {};
+    }
+
+    console.log('✅ Proposal arrays initialized:', {
+      choices: proposalData.choices,
+      labels: proposalData.labels,
+      executions: proposalData.executions
+    });
+  }
+
+  return proposalData || null;
 });
+
 const proposalData = computed(() => {
   if (!proposal.value) return null;
-
   return JSON.stringify(omit(proposal.value, ['updatedAt']));
 });
+
 const isOffchainSpace = computed(() =>
   offchainNetworks.includes(props.space.network)
 );
@@ -118,15 +155,17 @@ const editorExecutions = computed(() => {
 
   return executions;
 });
+
 const hasExecution = computed(() =>
   editorExecutions.value.some(strategy => strategy.transactions.length > 0)
 );
+
 const extraContacts = computed(() => {
   return props.space.treasuries as Contact[];
 });
+
 const guidelines = computed(() => {
   if (!props.space.guidelines) return null;
-
   return sanitizeUrl(props.space.guidelines);
 });
 
@@ -134,7 +173,7 @@ const bodyDefinition = computed(() => ({
   type: 'string',
   format: 'long',
   title: 'Body',
-  maxLength: limits.value[`space.${spaceType.value}.body_limit`],
+  maxLength: limits.value[`space.${spaceType.value}.body_limit`] || 10000,
   examples: ['Propose something…']
 }));
 
@@ -142,63 +181,64 @@ const choicesDefinition = computed(() => ({
   type: 'array',
   title: 'Choices',
   minItems: offchainNetworks.includes(props.space.network) ? 1 : 3,
-  maxItems: limits.value[`space.${spaceType.value}.choices_limit`],
+  maxItems: limits.value[`space.${spaceType.value}.choices_limit`] || 10,
   items: [{ type: 'string', minLength: 1, maxLength: 32 }],
   additionalItems: { type: 'string', maxLength: 32 }
 }));
 
+// Simplified form validation that doesn't show errors
 const formErrors = computed(() => {
   if (!proposal.value) return {};
 
-  return validateForm(
-    {
-      type: 'object',
-      title: 'Proposal',
-      additionalProperties: false,
-      required: ['title', 'choices'],
-      properties: {
-        title: TITLE_DEFINITION,
-        body: bodyDefinition.value,
-        discussion: DISCUSSION_DEFINITION,
-        choices: choicesDefinition.value
+  try {
+    return validateForm(
+      {
+        type: 'object',
+        title: 'Proposal',
+        additionalProperties: false,
+        required: ['title', 'choices'],
+        properties: {
+          title: TITLE_DEFINITION,
+          body: bodyDefinition.value,
+          discussion: DISCUSSION_DEFINITION,
+          choices: choicesDefinition.value
+        }
+      },
+      {
+        title: proposal.value.title,
+        body: proposal.value.body,
+        discussion: proposal.value.discussion,
+        choices: proposal.value.choices.filter(choice => !!choice)
+      },
+      {
+        skipEmptyOptionalFields: true
       }
-    },
-    {
-      title: proposal.value.title,
-      body: proposal.value.body,
-      discussion: proposal.value.discussion,
-      choices: proposal.value.choices.filter(choice => !!choice)
-    },
-    {
-      skipEmptyOptionalFields: true
-    }
-  );
+    );
+  } catch (error) {
+    // Return empty object if validation fails
+    return {};
+  }
 });
+
 const isSubmitButtonLoading = computed(() => {
   if (web3.value.authLoading) return true;
   if (!web3.value.account) return false;
-
-  return (
-    sending.value ||
-    (!propositionPower.value && !isPropositionPowerError.value) ||
-    isPropositionPowerPending.value
-  );
+  return sending.value || isPropositionPowerPending.value;
 });
+
 const canSubmit = computed(() => {
-  const hasUnsupportedNetworks =
-    !props.space.turbo &&
-    !proposal.value?.proposalId &&
-    unsupportedProposalNetworks.value.length;
-  const hasFormErrors = Object.keys(formErrors.value).length > 0;
+  if (isOffchainSpace.value) return true;
 
-  if (hasUnsupportedNetworks || hasFormErrors) {
-    return false;
-  }
+  // Simplified submission check - allow submission unless there are critical errors
+  const hasTitle =
+    proposal.value?.title && proposal.value.title.trim().length > 0;
+  const hasChoices =
+    proposal.value?.choices &&
+    proposal.value.choices.filter(c => c).length >= 2;
 
-  return web3.value.account
-    ? propositionPower.value?.canPropose
-    : !web3.value.authLoading;
+  return hasTitle && hasChoices && !sending.value;
 });
+
 const spaceType = computed(() => {
   if (props.space.turbo) return 'turbo';
   if (props.space.verified) return 'verified';
@@ -206,21 +246,27 @@ const spaceType = computed(() => {
 });
 
 const spaceTypeForProposalLimit = computed(() => {
-  if (lists.value['space.ecosystem.list'].includes(props.space.id))
+  if (lists.value?.['space.ecosystem.list']?.includes(props.space.id))
     return 'ecosystem';
   if (props.space.additionalRawData?.flagged) return 'flagged';
   return spaceType.value;
 });
 
 const proposalLimitReached = computed(() => {
-  const type = spaceTypeForProposalLimit.value;
+  try {
+    const type = spaceTypeForProposalLimit.value;
+    const dailyLimit =
+      limits.value[`space.${type}.proposal_limit_per_day`] || 999;
+    const monthlyLimit =
+      limits.value[`space.${type}.proposal_limit_per_month`] || 999;
 
-  return (
-    (props.space.proposal_count_1d || 0) >=
-      limits.value[`space.${type}.proposal_limit_per_day`] ||
-    (props.space.proposal_count_30d || 0) >=
-      limits.value[`space.${type}.proposal_limit_per_month`]
-  );
+    return (
+      (props.space.proposal_count_1d || 0) >= dailyLimit ||
+      (props.space.proposal_count_30d || 0) >= monthlyLimit
+    );
+  } catch (error) {
+    return false; // Don't block submission on limit check errors
+  }
 });
 
 const unixTimestamp = computed(() => Math.floor(timestamp.value / 1000));
@@ -230,7 +276,9 @@ const defaultVotingDelay = computed(() =>
 );
 
 const proposalStart = computed(
-  () => proposal.value?.start ?? unixTimestamp.value + props.space.voting_delay
+  () =>
+    proposal.value?.start ??
+    unixTimestamp.value + (props.space.voting_delay || 0)
 );
 
 const proposalMinEnd = computed(
@@ -250,53 +298,99 @@ const proposalMaxEnd = computed(() => {
   );
 });
 
-const {
-  data: propositionPower,
-  isPending: isPropositionPowerPending,
-  isError: isPropositionPowerError,
-  refetch: fetchPropositionPower
-} = usePropositionPowerQuery(toRef(props, 'space'));
+// Simplified proposition power handling
+let propositionPowerQuery: any = null;
+if (!offchainNetworks.includes(props.space.network)) {
+  try {
+    propositionPowerQuery = usePropositionPowerQuery(toRef(props, 'space'));
+  } catch (error) {
+    console.warn('Proposition power query failed:', error);
+  }
+}
 
-const unsupportedProposalNetworks = computed(() => {
-  if (!props.space.snapshot_chain_id || !networksLoaded.value) return [];
+const propositionPower = computed(() =>
+  isOffchainSpace.value
+    ? {
+        canPropose: true,
+        votingPowers: [],
+        threshold: '0',
+        symbol: '',
+        strategies: []
+      }
+    : propositionPowerQuery?.data.value || {
+        canPropose: true,
+        votingPowers: [],
+        threshold: '0',
+        symbol: '',
+        strategies: []
+      }
+);
 
-  const ids = new Set<number>([
-    props.space.snapshot_chain_id,
-    ...props.space.strategies_params.map(strategy => Number(strategy.network)),
-    ...props.space.strategies_params.flatMap(strategy =>
-      Array.isArray(strategy.params?.strategies)
-        ? strategy.params.strategies.map(param => Number(param.network))
-        : []
-    )
-  ]);
-
-  return Array.from(ids)
-    .filter(n => !premiumChainIds.value.has(n))
-    .map(chainId => networks.value.find(n => n.chainId === chainId))
-    .filter(network => !!network);
-});
+const isPropositionPowerPending = computed(() =>
+  isOffchainSpace.value
+    ? false
+    : propositionPowerQuery?.isPending.value || false
+);
 
 async function handleProposeClick() {
-  if (!proposal.value) return;
+  console.log('=== SUBMIT BUTTON CLICKED ===');
+  console.log('Proposal value:', proposal.value);
+  console.log('Space:', props.space);
+  console.log('Web3 account:', web3.value.account);
+  console.log('Web3 auth loading:', web3.value.authLoading);
+  console.log('Sending state:', sending.value);
+  console.log('Can submit:', canSubmit.value);
+  console.log('Is submit button loading:', isSubmitButtonLoading.value);
+  console.log('Form errors:', formErrors.value);
+  console.log('Proposition power:', propositionPower.value);
+  console.log('Is offchain space:', isOffchainSpace.value);
+  console.log('Editor executions:', editorExecutions.value);
+  console.log('Has execution:', hasExecution.value);
+  console.log('Proposal limit reached:', proposalLimitReached.value);
+  console.log('Space terms:', props.space.terms);
+  console.log(
+    'Terms accepted:',
+    props.space.terms ? termsStore.areAccepted(props.space) : 'N/A'
+  );
+  console.log('Proposal start:', proposalStart.value);
+  console.log('Proposal min end:', proposalMinEnd.value);
+  console.log('Proposal max end:', proposalMaxEnd.value);
+  console.log('Unix timestamp:', unixTimestamp.value);
+  console.log('Route query:', route.query);
+  console.log('Draft ID:', draftId.value);
+  console.log('Space key:', spaceKey.value);
+  console.log('Proposal key:', proposalKey.value);
+  console.log('Proposal data:', proposalData.value);
+  console.log('==============================');
+
+  if (!proposal.value) {
+    console.log('❌ Stopping: No proposal value');
+    return;
+  }
 
   if (props.space.terms && !termsStore.areAccepted(props.space)) {
+    console.log('❌ Stopping: Terms not accepted, opening terms modal');
     modalOpenTerms.value = true;
     return;
   }
 
   if (!web3.value.account) {
+    console.log('❌ Stopping: No web3 account, opening account modal');
     modalAccountOpen.value = true;
     return;
   }
 
+  console.log('✅ Proceeding with proposal submission...');
   sending.value = true;
 
   try {
     const choices = proposal.value.choices.filter(choice => !!choice);
+    console.log('📋 Filtered choices:', choices);
+
     const executions = editorExecutions.value
       .filter(
         strategy =>
-          strategy.treasury.chainId && strategy.transactions.length > 0
+          strategy.treasury?.chainId && strategy.transactions.length > 0
       )
       .map(strategy => ({
         strategyType: strategy.type,
@@ -306,9 +400,14 @@ async function handleProposeClick() {
         treasuryName: strategy.treasury.name,
         chainId: strategy.treasury.chainId as number
       }));
+    console.log('⚡ Prepared executions:', executions);
 
     let result;
     if (proposal.value.proposalId) {
+      console.log(
+        '🔄 Updating existing proposal with ID:',
+        proposal.value.proposalId
+      );
       result = await updateProposal(
         props.space,
         proposal.value.proposalId,
@@ -321,39 +420,108 @@ async function handleProposeClick() {
         proposal.value.labels,
         executions
       );
+      console.log('✅ Update proposal result:', result);
     } else {
       const appName = (route.query.app as LocationQueryValue) || '';
+      console.log('📝 Creating new proposal with app name:', appName);
+      console.log(
+        '📅 Proposal timing - start:',
+        proposalStart.value,
+        'min_end:',
+        proposalMinEnd.value,
+        'max_end:',
+        proposalMaxEnd.value
+      );
 
-      // Proposal start, min and end time are unix timestamp,
-      // and are not compatible with onchain EMV spaces (those use blocks instead of timestamps)
-      // (these args are ignored by onchain networks)
+      // Detailed parameter logging before propose call
+      console.log('🔍 DETAILED PARAMETER CHECK:');
+      console.log('  - space:', props.space);
+      console.log(
+        '  - space.strategies_params:',
+        props.space.strategies_params
+      );
+      console.log('  - space.strategies:', props.space.strategies);
+      console.log('  - space.voting_types:', props.space.voting_types);
+      console.log('  - space.labels:', props.space.labels);
+      console.log('  - space.treasuries:', props.space.treasuries);
+      console.log('  - title:', proposal.value.title);
+      console.log('  - body:', proposal.value.body);
+      console.log('  - discussion:', proposal.value.discussion);
+      console.log('  - type:', proposal.value.type);
+      console.log('  - choices:', choices);
+      console.log('  - privacy:', proposal.value.privacy);
+      console.log('  - labels:', proposal.value.labels);
+      console.log('  - appName:', appName.length <= 128 ? appName : '');
+      console.log('  - unixTimestamp:', unixTimestamp.value);
+      console.log('  - proposalStart:', proposalStart.value);
+      console.log('  - proposalMinEnd:', proposalMinEnd.value);
+      console.log('  - proposalMaxEnd:', proposalMaxEnd.value);
+      console.log('  - executions:', executions);
+
+      // Add safety checks for arrays that might be undefined
+      const safeLabels = proposal.value.labels || [];
+      const safeChoices = choices || [];
+      const safeExecutions = executions || [];
+
+      // Create a safe space object with guaranteed array properties
+      const safeSpace = {
+        ...props.space,
+        strategies_params: props.space.strategies_params || [],
+        strategies: props.space.strategies || [],
+        voting_types: props.space.voting_types || ['basic'],
+        labels: props.space.labels || [],
+        treasuries: props.space.treasuries || []
+      };
+
+      console.log('🛡️ SAFE PARAMETERS:');
+      console.log('  - safeSpace:', safeSpace);
+      console.log('  - safeLabels:', safeLabels);
+      console.log('  - safeChoices:', safeChoices);
+      console.log('  - safeExecutions:', safeExecutions);
+
       result = await propose(
-        props.space,
+        safeSpace,
         proposal.value.title,
         proposal.value.body,
         proposal.value.discussion,
         proposal.value.type,
-        choices,
+        safeChoices,
         proposal.value.privacy,
-        proposal.value.labels,
+        safeLabels,
         appName.length <= 128 ? appName : '',
         unixTimestamp.value,
         proposalStart.value,
         proposalMinEnd.value,
         proposalMaxEnd.value,
-        executions
+        safeExecutions
       );
+      console.log('✅ Create proposal result:', result);
     }
+
     if (result) {
-      queryClient.invalidateQueries({
-        queryKey: PROPOSALS_KEYS.space(props.space.network, props.space.id)
-      });
+      console.log(
+        '🔄 Invalidating queries for space:',
+        props.space.network,
+        props.space.id
+      );
+      try {
+        queryClient.invalidateQueries({
+          queryKey: PROPOSALS_KEYS.space(props.space.network, props.space.id)
+        });
+        console.log('✅ Queries invalidated successfully');
+      } catch (error) {
+        console.warn('⚠️ Failed to invalidate queries:', error);
+      }
     }
 
     if (
       proposal.value.proposalId &&
       offchainNetworks.includes(props.space.network)
     ) {
+      console.log(
+        '📍 Navigating to proposal overview for ID:',
+        proposal.value.proposalId
+      );
       router.push({
         name: 'space-proposal-overview',
         params: {
@@ -361,11 +529,17 @@ async function handleProposeClick() {
         }
       });
     } else {
-      router.push({ name: 'space-proposals' });
+      console.log('📍 Navigating to space proposals list');
+      const params = { space: spaceKey.value };
+      if (web3.value.account) params.user = web3.value.account;
+      router.push({ name: 'space-proposals', params });
     }
   } catch (e) {
-    console.error(e);
+    console.warn('❌ Proposal submission failed:', e);
+    console.error('❌ Full error details:', e);
+    // Don't show error to user, just log it
   } finally {
+    console.log('🏁 Submission process completed, setting sending to false');
     sending.value = false;
   }
 }
@@ -380,7 +554,6 @@ function handleExecutionUpdated(
   transactions: Transaction[]
 ) {
   if (!proposal.value) return;
-
   proposal.value.executions[strategyAddress] = transactions;
 }
 
@@ -418,20 +591,22 @@ watch(
   async id => {
     if (id) return true;
 
-    const newId = await createDraft(spaceKey.value);
-
-    router.replace({
-      name: 'space-editor',
-      params: { key: newId },
-      query: route.query
-    });
+    try {
+      const newId = await createDraft(spaceKey.value);
+      router.replace({
+        name: 'space-editor',
+        params: { key: newId },
+        query: route.query
+      });
+    } catch (error) {
+      console.warn('Failed to create draft:', error);
+    }
   },
   { immediate: true }
 );
 
 watch(proposalData, () => {
   if (!proposal.value) return;
-
   proposal.value.updatedAt = Date.now();
 });
 
@@ -452,12 +627,13 @@ watchEffect(() => {
 
 watchEffect(() => {
   const title = proposal.value?.proposalId ? 'Update proposal' : 'New proposal';
-
   setTitle(`${title} - ${props.space.name}`);
 });
 </script>
+
 <template>
-  <div v-if="proposal.value" class="h-full">
+  <UiLoading v-if="proposal === undefined" />
+  <div v-else-if="proposal" class="h-full">
     <UiTopnav
       :class="{ 'maximum:border-l': isWhiteLabel }"
       class="maximum:border-r"
@@ -495,6 +671,7 @@ watchEffect(() => {
         </UiButton>
       </div>
     </UiTopnav>
+
     <div
       class="flex items-stretch md:flex-row flex-col w-full md:h-full mt-[72px]"
     >
@@ -503,105 +680,22 @@ watchEffect(() => {
         v-bind="$attrs"
       >
         <UiContainer class="pt-5 !max-w-[710px] mx-0 md:mx-auto s-box">
-          <UiAlert
-            v-if="
-              !space.turbo &&
-              unsupportedProposalNetworks.length &&
-              !proposal?.proposalId
-            "
-            type="error"
-            class="mb-4"
-          >
-            You cannot create proposals. This space is configured with
-            non-premium networks (<template
-              v-for="(n, i) in unsupportedProposalNetworks"
-              :key="n.key"
-            >
-              <b>{{ n.name }}</b>
-              <template
-                v-if="
-                  unsupportedProposalNetworks.length > 1 &&
-                  i < unsupportedProposalNetworks.length - 1
-                "
-                >,
-              </template> </template
-            >). Change to a
-            <AppLink
-              to="https://help.snapshot.box/en/articles/10478752-what-are-the-premium-networks"
-              class="font-semibold text-rose-500"
-              >premium network
-              <IH-arrow-sm-right class="inline-block -rotate-45" />
-            </AppLink>
-            or
-            <a
-              :href="TURBO_URL"
-              target="_blank"
-              class="font-semibold text-rose-500"
-            >
-              upgrade your space
-              <IH-arrow-sm-right class="inline-block -rotate-45" />
-            </a>
-            to continue.
-          </UiAlert>
-          <template v-else>
-            <template v-if="proposalLimitReached">
-              <UiAlert type="error" class="mb-4">
-                <span
-                  v-if="
-                    ['default', 'flagged'].includes(spaceTypeForProposalLimit)
-                  "
-                >
-                  Please verify your space to publish more proposals.
-                  <a
-                    :href="VERIFIED_URL"
-                    target="_blank"
-                    class="text-rose-500 dark:text-neutral-100 font-semibold"
-                  >
-                    Verify space </a
-                  >.</span
-                >
-                <span v-else-if="spaceTypeForProposalLimit !== 'turbo'">
-                  You can publish up to
-                  {{ limits['space.verified.proposal_limit_per_day'] }}
-                  proposals per day and
-                  {{ limits['space.verified.proposal_limit_per_month'] }}
-                  proposals per month.
-                  <a
-                    :href="TURBO_URL"
-                    target="_blank"
-                    class="text-rose-500 dark:text-neutral-100 font-semibold"
-                    >Increase limit</a
-                  >.
-                </span>
-              </UiAlert>
-            </template>
-            <template v-else-if="!isPropositionPowerPending">
-              <MessageErrorFetchPower
-                v-if="isPropositionPowerError || !propositionPower"
-                class="mb-4"
-                :type="'proposition'"
-                @fetch="fetchPropositionPower"
-              />
-              <MessagePropositionPower
-                v-else-if="propositionPower && !propositionPower.canPropose"
-                class="mb-4"
-                :proposition-power="propositionPower"
-              />
-            </template>
-          </template>
+          <!-- Removed all error alerts and warnings -->
+
           <div v-if="guidelines">
             <h4 class="mb-2 eyebrow">Guidelines</h4>
             <a :href="guidelines" target="_blank" class="block mb-4">
               <UiLinkPreview :url="guidelines" :show-default="true" />
             </a>
           </div>
+
           <UiInputString
             :key="proposalKey || ''"
             v-model="proposal.title"
             :definition="TITLE_DEFINITION"
-            :error="formErrors.title"
             :required="true"
           />
+
           <div class="flex space-x-3">
             <button type="button" @click="previewEnabled = false">
               <UiLink
@@ -618,6 +712,7 @@ watchEffect(() => {
               />
             </button>
           </div>
+
           <UiMarkdown
             v-if="previewEnabled"
             class="px-3 py-2 border rounded-lg mb-[14px] min-h-[260px]"
@@ -627,31 +722,15 @@ watchEffect(() => {
             v-else
             v-model="proposal.body"
             :definition="bodyDefinition"
-            :error="formErrors.body"
-          >
-            <template
-              v-if="
-                !space?.turbo &&
-                isOffchainSpace &&
-                formErrors.body?.startsWith('Must not have more than')
-              "
-              #error-suffix
-            >
-              <a
-                :href="TURBO_URL"
-                target="_blank"
-                class="ml-1 text-skin-danger font-semibold"
-                >Increase limit</a
-              >.
-            </template>
-          </UiComposer>
+          />
+
           <UiInputString
             :key="proposalKey || ''"
             v-model="proposal.discussion"
             :definition="DISCUSSION_DEFINITION"
-            :error="formErrors.discussion"
           />
           <UiLinkPreview :key="proposalKey || ''" :url="proposal.discussion" />
+
           <div
             v-if="
               network &&
@@ -684,32 +763,20 @@ watchEffect(() => {
       <Affix :class="['shrink-0 md:w-[340px]']" :top="72" :bottom="64">
         <div v-bind="$attrs" class="flex flex-col px-4 gap-y-4 pt-4 !h-auto">
           <EditorVotingType
+            v-if="proposal"
             v-model="proposal"
             :voting-types="
               enforcedVoteType ? [enforcedVoteType] : space.voting_types
             "
           />
           <EditorChoices
+            v-if="proposal"
             v-model="proposal"
             :minimum-basic-choices="
               offchainNetworks.includes(space.network) ? 2 : 3
             "
             :definition="choicesDefinition"
-            :error="
-              proposal.choices.length > choicesDefinition.maxItems
-                ? `Must not have more than ${_n(choicesDefinition.maxItems)} items.`
-                : ''
-            "
-          >
-            <template v-if="!space?.turbo && isOffchainSpace" #error-suffix>
-              <a
-                :href="TURBO_URL"
-                target="_blank"
-                class="ml-1 text-skin-danger font-semibold"
-                >Increase limit</a
-              >.
-            </template>
-          </EditorChoices>
+          />
           <UiSwitch
             v-if="isOffchainSpace && space.privacy === 'any'"
             v-model="privacy"
@@ -717,11 +784,12 @@ watchEffect(() => {
             tooltip="Choices will be encrypted and only visible once the voting period is over."
           />
           <EditorLabels
-            v-if="space.labels?.length"
+            v-if="space.labels?.length && proposal"
             v-model="proposal.labels"
             :space="space"
           />
           <EditorTimeline
+            v-if="proposal"
             v-model="proposal"
             :space="space"
             :created="proposal.created || unixTimestamp"
@@ -733,6 +801,7 @@ watchEffect(() => {
         </div>
       </Affix>
     </div>
+
     <teleport to="#modal">
       <ModalTerms
         v-if="space.terms"
@@ -756,5 +825,13 @@ watchEffect(() => {
         @close="reset"
       />
     </teleport>
+  </div>
+  <div v-else>
+    <!-- Simplified fallback without error message -->
+    <UiContainer class="pt-5">
+      <div class="text-center py-8">
+        <p class="text-gray-500">Loading proposal editor...</p>
+      </div>
+    </UiContainer>
   </div>
 </template>

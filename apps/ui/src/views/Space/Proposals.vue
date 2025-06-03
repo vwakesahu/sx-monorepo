@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import { LocationQueryRaw } from 'vue-router';
 import ProposalIconStatus from '@/components/ProposalIconStatus.vue';
 import { ProposalsFilter } from '@/networks/types';
@@ -35,21 +36,116 @@ const spaceLabels = computed(() => {
   return Object.fromEntries(props.space.labels.map(label => [label.id, label]));
 });
 
-const {
-  data,
-  fetchNextPage,
-  hasNextPage,
-  isPending,
-  isError,
-  isFetchingNextPage
-} = useProposalsQuery(
-  toRef(() => props.space.network),
-  toRef(() => props.space.id),
-  {
-    state,
-    labels
+const { fetchNextPage, hasNextPage, isPending, isError, isFetchingNextPage } =
+  useProposalsQuery(
+    toRef(() => props.space.network),
+    toRef(() => props.space.id),
+    {
+      state,
+      labels
+    }
+  );
+
+const localKey = computed(() => `localProposals:${props.space.id}`);
+const localProposals = computed(() => {
+  try {
+    return JSON.parse(localStorage.getItem(localKey.value) || '[]');
+  } catch {
+    return [];
   }
-);
+});
+const latestLocalProposal = computed(() => {
+  const local = localProposals.value;
+  if (local.length) {
+    const sorted = local.sort((a, b) => b.created - a.created);
+    console.log('DEBUG: Showing local proposal', sorted[0]);
+    return [sorted[0]];
+  }
+  // Robust fallback matching
+  const normalizedSpaceId = (
+    (props.space as any).spaceContractAddress ||
+    props.space.id ||
+    ''
+  )
+    .toLowerCase()
+    .replace(/^s:/, '')
+    .replace(/^base-sep:/, '');
+  console.log('DEBUG: deployedSpaces', deployedSpaces.value);
+  console.log('DEBUG: props.space', props.space);
+  console.log('DEBUG: normalizedSpaceId', normalizedSpaceId);
+  const deployed = deployedSpaces.value.find(
+    s =>
+      (s.spaceContractAddress || '')
+        .toLowerCase()
+        .replace(/^s:/, '')
+        .replace(/^base-sep:/, '') === normalizedSpaceId
+  );
+  if (deployed) {
+    const fakeProposal = {
+      id: 'fake',
+      title: 'No proposals yet',
+      body: deployed.description || '',
+      discussion: '',
+      choices: ['For', 'Against', 'Abstain'],
+      created: Date.now(),
+      author: { id: deployed.creatorAddress || '0x0' },
+      state: 'pending',
+      space: {
+        id: deployed.spaceContractAddress,
+        name: deployed.name,
+        avatar: deployed.icon,
+        network: deployed.network
+      },
+      proposal_id: '',
+      execution_network: deployed.network,
+      isInvalid: false,
+      type: (deployed.voting_types && deployed.voting_types[0]) || 'basic',
+      quorum: 0,
+      execution_hash: '',
+      metadata_uri: '',
+      executions: [],
+      start: Date.now(),
+      min_end: Date.now(),
+      max_end: Date.now(),
+      snapshot: 0,
+      labels: deployed.labels || [],
+      scores: [],
+      scores_total: 0,
+      execution_time: 0,
+      execution_strategy: '',
+      execution_strategy_type: '',
+      execution_destination: '',
+      timelock_veto_guardian: '',
+      strategies_indices: [],
+      strategies: [],
+      strategies_params: [],
+      edited: null,
+      tx: '',
+      execution_tx: '',
+      veto_tx: '',
+      vote_count: 0,
+      has_execution_window_opened: false,
+      execution_ready: false,
+      vetoed: false,
+      completed: false,
+      cancelled: false,
+      privacy: deployed.privacy || 'none',
+      flagged: false
+    };
+    console.log('DEBUG: Showing fake proposal', fakeProposal);
+    return [fakeProposal];
+  }
+  console.log('DEBUG: No proposals or deployed match found');
+  return [];
+});
+
+const deployedSpaces = computed(() => {
+  try {
+    return JSON.parse(localStorage.getItem('deployedContracts') || '[]');
+  } catch {
+    return [];
+  }
+});
 
 function handleClearLabelsFilter(close: () => void) {
   labels.value = [];
@@ -229,8 +325,23 @@ watchEffect(() => setTitle(`Proposals - ${props.space.name}`));
       :is-error="isError"
       :loading="isPending"
       :loading-more="isFetchingNextPage"
-      :proposals="data?.pages.flat() ?? []"
+      :proposals="latestLocalProposal"
       @end-reached="handleEndReached"
     />
+    <div v-if="!latestLocalProposal.length">
+      <div class="px-4 py-3 flex items-center text-skin-link gap-2">
+        <IH-exclamation-circle />
+        <span>There are no proposals here.</span>
+      </div>
+      <div v-if="deployedSpaces.length" class="px-4 py-3">
+        <h4 class="mb-2">Available Spaces (deployedContracts):</h4>
+        <ul>
+          <li v-for="space in deployedSpaces" :key="space.spaceContractAddress">
+            <strong>{{ space.name }}</strong> —
+            <span>{{ space.spaceContractAddress }}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
   </div>
 </template>

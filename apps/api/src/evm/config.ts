@@ -19,13 +19,13 @@ type NetworkID =
   | 'curtis';
 
 const START_BLOCKS: Record<NetworkID, number> = {
-  eth: 18962278,
-  sep: 4519171,
-  oeth: 118359200,
-  matic: 50858232,
-  arb1: 157825417,
-  base: 23524251,
-  mnt: 75662182,
+  eth: 22396205,
+  sep: 8240233,
+  oeth: 135295581,
+  matic: 71020497,
+  arb1: 332477038,
+  base: 29700296,
+  mnt: 79029814,
   ape: 12100384,
   curtis: 16682282
 };

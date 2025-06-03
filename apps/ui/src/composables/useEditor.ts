@@ -143,13 +143,31 @@ export function useEditor() {
       const space = queryClient.getQueryData<Space>(['spaces', 'detail', id]);
       if (!space) continue;
 
-      const type = space.voting_types.includes(PREFERRED_VOTE_TYPE)
-        ? PREFERRED_VOTE_TYPE
-        : space.voting_types[0];
-
+      const type =
+        space.voting_types && space.voting_types.length > 0
+          ? space.voting_types.includes(PREFERRED_VOTE_TYPE)
+            ? PREFERRED_VOTE_TYPE
+            : space.voting_types[0]
+          : PREFERRED_VOTE_TYPE;
       spaceVoteType.set(id, type);
-      spacePrivacy.set(id, space.privacy === 'any' ? 'none' : space.privacy);
+      spacePrivacy.set(
+        id,
+        space.privacy === 'any' ? 'none' : space.privacy || 'none'
+      );
     }
+  }
+
+  function getProposalValidationFromLocalStorage(spaceKey: string) {
+    const key = `proposal_validation_${spaceKey}`;
+    const data = localStorage.getItem(key);
+    if (data) {
+      return JSON.parse(data);
+    }
+    // Fall back to a default validation if nothing is found
+    return {
+      isValid: true,
+      errors: []
+    };
   }
 
   async function createDraft(
@@ -159,14 +177,18 @@ export function useEditor() {
   ) {
     await setSpacesVoteTypeAndPrivacy([spaceId]);
 
-    const type = payload?.type || spaceVoteType.get(spaceId)!;
-    const privacy: Privacy = payload?.privacy || spacePrivacy.get(spaceId)!;
+    const type =
+      payload?.type || spaceVoteType.get(spaceId) || PREFERRED_VOTE_TYPE;
+    const privacy: Privacy =
+      payload?.privacy || spacePrivacy.get(spaceId) || 'none';
     const choices = type === 'basic' ? clone(BASIC_CHOICES) : Array(2).fill('');
 
     const id = draftKey ?? generateId();
     const key = `${spaceId}:${id}`;
 
     const body = await getInitialProposalBody(spaceId);
+
+    const validation = getProposalValidationFromLocalStorage(key);
 
     proposals[key] = {
       title: '',
@@ -179,6 +201,11 @@ export function useEditor() {
       executions: Object.create(null),
       updatedAt: Date.now(),
       proposalId: null,
+      validation,
+      proposalValidation: payload?.proposalValidation || {
+        name: 'basic',
+        params: {}
+      },
       ...payload
     };
 

@@ -32,7 +32,18 @@ export const VANILLA_EXECUTION_STRATEGY = {
 };
 
 const arr = JSON.parse(localStorage.getItem('deployedContracts') || '[]');
+let changed = false;
 arr.forEach(s => {
   if (s.network === 'base-sepolia') s.network = 'base-sep';
+  if (!s.voting_types) {
+    s.voting_types = ['basic'];
+    changed = true;
+  }
+  if (!s.privacy) {
+    s.privacy = 'none';
+    changed = true;
+  }
 });
-localStorage.setItem('deployedContracts', JSON.stringify(arr, null, 2));
+if (changed) {
+  localStorage.setItem('deployedContracts', JSON.stringify(arr, null, 2));
+}

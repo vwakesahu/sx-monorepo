@@ -46,8 +46,12 @@ export function useLocalSpace() {
             createdAt: space.createdAt,
             treasuries: [], // Default empty array for treasuries
             guidelines: '', // Default empty string for guidelines
-            voting_types: ['basic'],
-            privacy: 'none'
+            voting_types: space.voting_types || ['basic'],
+            privacy: space.privacy || 'none',
+            proposalValidation: space.proposalValidation || {
+              name: 'basic',
+              params: { strategies: [] }
+            }
           };
         }
       }

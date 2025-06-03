@@ -1,5 +1,5 @@
 import { BigNumberish } from '@ethersproject/bignumber';
-import { EvmNetworkConfig } from './types';
+import { EvmNetworkConfig, NetworkID } from './types';
 
 type AdditionalProperties = {
   maxPriorityFeePerGas?: BigNumberish;
@@ -119,6 +119,7 @@ export const evmNetworks = {
   matic: createStandardConfig(137),
   arb1: createStandardConfig(42161),
   base: createStandardConfig(8453),
+  'base-sep': createStandardConfig(84532),
   mnt: createStandardConfig(5000, {
     // https://docs.mantle.xyz/network/system-information/fee-mechanism/eip-1559-support#application-of-eip-1559-in-mantle-v2-tectonic
     maxPriorityFeePerGas: 0
@@ -136,3 +137,5 @@ export const evmBase = createEvmConfig('base');
 export const evmMantle = createEvmConfig('mnt');
 export const evmApe = createEvmConfig('ape');
 export const evmCurtis = createEvmConfig('curtis');
+
+export const evmNetworkIds = Object.keys(evmNetworks) as NetworkID[];

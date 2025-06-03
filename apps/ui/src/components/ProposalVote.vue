@@ -25,15 +25,16 @@ const { isInvalidNetwork } = useSafeWallet(
 const start = getTsFromCurrent(props.proposal.network, props.proposal.start);
 
 const isSupported = computed(() => {
+  // Always support local proposals
+  if (props.proposal.id && String(props.proposal.id).startsWith('local-'))
+    return true;
   const network = getNetwork(props.proposal.network);
-
   const hasSupportedAuthenticator = props.proposal.space.authenticators.find(
     authenticator => network.helpers.isAuthenticatorSupported(authenticator)
   );
   const hasSupportedStrategies = props.proposal.strategies.find(strategy =>
     network.helpers.isStrategySupported(strategy)
   );
-
   return (
     hasSupportedAuthenticator &&
     hasSupportedStrategies &&

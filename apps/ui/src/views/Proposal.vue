@@ -18,6 +18,7 @@ const { setTitle } = useTitle();
 const { web3 } = useWeb3();
 const { modalAccountOpen } = useModal();
 const termsStore = useTermsStore();
+const router = useRouter();
 
 const modalOpenVote = ref(false);
 const modalOpenTerms = ref(false);
@@ -29,23 +30,90 @@ const boostCount = ref(0);
 
 const id = computed(() => route.params.proposal as string);
 
-const { data: proposal, isPending } = useProposalQuery(
+// Patch: load local proposal if id starts with 'local-'
+const localProposal = computed(() => {
+  if (!id.value || !id.value.startsWith('local-')) return null;
+  // Try both possible localStorage keys
+  let spaceId = props.space.id;
+  if (spaceId.startsWith('s:')) spaceId = spaceId.slice(2);
+  const localKey1 = `localProposals:${props.space.id}`;
+  const localKey2 = `localProposals:${spaceId}`;
+  let localProposals = [];
+  try {
+    localProposals = JSON.parse(localStorage.getItem(localKey1) || '[]');
+    if (!localProposals.length) {
+      localProposals = JSON.parse(localStorage.getItem(localKey2) || '[]');
+    }
+  } catch {}
+  return localProposals.find(p => p.id === id.value) || null;
+});
+
+const { data: backendProposal, isPending } = useProposalQuery(
   props.space.network,
   props.space.id,
   id
 );
 
+const proposal = computed(() => {
+  let p: any = null;
+  if (id.value && id.value.startsWith('local-')) {
+    p = localProposal.value ? { ...localProposal.value } : null;
+    if (p) {
+      // Patch required fields for local proposals
+      p.state = 'draft';
+      if (!p.space) p.space = {};
+      if (!Array.isArray(p.space.strategies_parsed_metadata))
+        p.space.strategies_parsed_metadata = [];
+      if (!Array.isArray(p.executions)) p.executions = [];
+      if (typeof p.cancelled !== 'boolean') p.cancelled = false;
+      if (typeof p.vote_count !== 'number') p.vote_count = 0;
+      if (!Array.isArray(p.labels)) p.labels = [];
+      if (!Array.isArray(p.choices)) p.choices = [];
+      if (!p.type) p.type = 'basic';
+      if (!Array.isArray(p.strategies))
+        p.strategies = ['0x0000000000000000000000000000000000000000'];
+      if (!p.space.authenticators)
+        p.space.authenticators = ['0x0000000000000000000000000000000000000000'];
+    }
+  } else {
+    p = backendProposal.value;
+  }
+  return p;
+});
+
 const {
-  data: votingPower,
-  error: votingPowerError,
-  isPending: isVotingPowerPending,
-  isError: isVotingPowerError,
+  data: backendVotingPower,
+  error: backendVotingPowerError,
+  isPending: backendIsVotingPowerPending,
+  isError: backendIsVotingPowerError,
   refetch: fetchVotingPower
 } = useProposalVotingPowerQuery(
   toRef(() => web3.value.account),
   toRef(() => proposal.value),
   toRef(() => ['active', 'pending'].includes(proposal.value?.state || ''))
 );
+
+const votingPower = computed(() => {
+  // For local proposals, always return 1 voting power (not NaN)
+  if (id.value && id.value.startsWith('local-')) {
+    return {
+      votingPowers: [{ value: 1n }],
+      total: 1n
+    };
+  }
+  // Use backend voting power otherwise
+  return backendVotingPower.value;
+});
+
+const isVotingPowerPending = computed(() => {
+  if (id.value && id.value.startsWith('local-')) return false;
+  return backendIsVotingPowerPending.value;
+});
+
+const isVotingPowerError = computed(() => {
+  if (id.value && id.value.startsWith('local-')) return false;
+  return backendIsVotingPowerError.value;
+});
 
 const discussion = computed(() => {
   if (!proposal.value) return null;
@@ -55,12 +123,11 @@ const discussion = computed(() => {
 
 const votingPowerDecimals = computed(() => {
   if (!proposal.value) return 0;
-  return Math.max(
-    ...proposal.value.space.strategies_parsed_metadata.map(
-      metadata => metadata.decimals
-    ),
-    0
-  );
+  // Patch: default to [] if missing
+  const arr = Array.isArray(proposal.value.space?.strategies_parsed_metadata)
+    ? proposal.value.space.strategies_parsed_metadata
+    : [];
+  return Math.max(...arr.map(metadata => metadata.decimals || 0), 0);
 });
 
 const currentVote = computed(
@@ -74,18 +141,20 @@ const withoutContentInBottom = computed(
 );
 
 async function handleVoteClick(choice: Choice) {
+  if (id.value && id.value.startsWith('local-')) {
+    selectedChoice.value = choice;
+    modalOpenVote.value = true;
+    return;
+  }
   if (!web3.value.account) {
     modalAccountOpen.value = true;
     return;
   }
-
   selectedChoice.value = choice;
-
   if (props.space.terms && !termsStore.areAccepted(props.space)) {
     modalOpenTerms.value = true;
     return;
   }
-
   modalOpenVote.value = true;
 }
 
@@ -131,6 +200,44 @@ watchEffect(() => {
   if (!proposal.value) return;
 
   setTitle(proposal.value.title || `Proposal #${proposal.value.proposal_id}`);
+});
+
+// Handle missing proposal id: redirect to latest local proposal or proposals list
+onMounted(() => {
+  if (!route.params.proposal) {
+    // Try to find latest local proposal for this space
+    let spaceId = props.space.id;
+    // For EVM spaces, the id may be the contract address
+    if (spaceId.startsWith('s:')) spaceId = spaceId.slice(2);
+    // Try both keys
+    const localKey1 = `localProposals:${props.space.id}`;
+    const localKey2 = `localProposals:${spaceId}`;
+    let localProposals = [];
+    try {
+      localProposals = JSON.parse(localStorage.getItem(localKey1) || '[]');
+      if (!localProposals.length) {
+        localProposals = JSON.parse(localStorage.getItem(localKey2) || '[]');
+      }
+    } catch {}
+    if (localProposals.length > 0) {
+      // Sort by created desc, pick latest
+      localProposals.sort((a, b) => b.created - a.created);
+      const latest = localProposals[0];
+      router.replace({
+        name: 'space-proposal-overview',
+        params: {
+          proposal: latest.id,
+          space: `${props.space.network}:${props.space.id}`
+        }
+      });
+    } else {
+      // No local proposals, go to proposals list
+      router.replace({
+        name: 'space-proposals',
+        params: { space: `${props.space.network}:${props.space.id}` }
+      });
+    }
+  }
 });
 </script>
 
@@ -242,11 +349,16 @@ watchEffect(() => {
             <div
               v-if="
                 !proposal.cancelled &&
-                ['pending', 'active'].includes(proposal.state)
+                (['pending', 'active'].includes(proposal.state) ||
+                  proposal.state === 'draft')
               "
             >
               <h4 class="mb-2.5 eyebrow flex items-center space-x-2">
-                <template v-if="editMode">
+                <template v-if="id && id.startsWith('local-')">
+                  <IH-pencil />
+                  <span>Draft</span>
+                </template>
+                <template v-else-if="editMode">
                   <IH-cursor-click />
                   <span>Edit your vote</span>
                 </template>

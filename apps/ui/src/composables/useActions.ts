@@ -1,4 +1,12 @@
 import { Web3Provider } from '@ethersproject/providers';
+import {
+  createPublicClient,
+  createWalletClient,
+  custom,
+  encodeAbiParameters
+} from 'viem';
+import { baseSepolia } from 'viem/chains';
+import { VANILLA_AUTHENTICATOR } from '@/contracts/contract-info';
 import { getDelegationNetwork } from '@/helpers/delegation';
 import { registerTransaction } from '@/helpers/mana';
 import { isUserAbortError } from '@/helpers/utils';
@@ -20,6 +28,9 @@ import {
   User,
   VoteType
 } from '@/types';
+// You may need to import writeContractAsync and deployedAddresses from your actual setup
+// import { writeContractAsync } from 'wherever';
+// import { deployedAddresses } from 'wherever';
 
 const offchainToStarknetIds: Record<string, NetworkID> = {
   s: 'sn',
@@ -351,35 +362,196 @@ export function useActions() {
       return false;
     }
 
-    const network = getNetwork(space.network);
+    // Only use EVM logic for EVM networks, fallback to old logic otherwise
+    if (space.network === 'base-sep' || space.network === 'base') {
+      const address = auth.value.account;
+      // Load deployed addresses for this space from localStorage
+      const data = localStorage.getItem('deployedContracts');
+      let matchAddress = space.id;
+      if (matchAddress.startsWith('s:')) matchAddress = matchAddress.slice(2);
+      let deployedAddresses: {
+        spaceContract: string;
+        vanillaAuthenticator: string;
+        vanillaExecutionStrategy: string;
+        vanillaProposalValidationStrategy: string;
+        vanillaVotingStrategy: string;
+      } | null = null;
+      if (data) {
+        const spaces = JSON.parse(data);
+        const found = spaces.find(s => s.spaceContractAddress === matchAddress);
+        if (!found)
+          throw new Error(
+            `No deployed contract info found for this space address: ${matchAddress}`
+          );
+        deployedAddresses = {
+          spaceContract: found.spaceContractAddress,
+          vanillaAuthenticator: found.authenticatorAddress,
+          vanillaExecutionStrategy: found.executionStrategyAddress,
+          vanillaProposalValidationStrategy:
+            found.proposalValidationStrategyAddress,
+          vanillaVotingStrategy: found.votingStrategyAddress
+        };
+      } else {
+        throw new Error('No deployedContracts found in localStorage');
+      }
+      if (!deployedAddresses) {
+        throw new Error('deployedAddresses is null');
+      }
+      // Setup viem clients using window.ethereum
+      const ethereumProvider =
+        typeof window !== 'undefined' && window.ethereum
+          ? (window.ethereum as any)
+          : undefined;
+      if (!ethereumProvider) {
+        throw new Error('Ethereum provider (window.ethereum) not found');
+      }
+      const walletClient = createWalletClient({
+        chain: baseSepolia,
+        transport: custom(ethereumProvider)
+      });
+      const [account] = await walletClient.getAddresses();
 
-    const txHash = await wrapPromise(
-      space.network,
-      network.actions.propose(
-        auth.value.provider,
-        auth.value.connector.type,
-        auth.value.account,
-        space,
+      const data2propose = {
+        author: address,
+        metadataURI: '',
+        executionStrategy: {
+          addr: deployedAddresses.vanillaExecutionStrategy as `0x${string}`,
+          params: '0x' as `0x${string}`
+        },
+        userProposalValidationParams: '0x' as `0x${string}`
+      };
+
+      const params = [
+        { name: 'author', type: 'address' },
+        { name: 'metadataURI', type: 'string' },
+        {
+          name: 'executionStrategy',
+          type: 'tuple',
+          components: [
+            { name: 'addr', type: 'address' },
+            { name: 'params', type: 'bytes' }
+          ]
+        },
+        { name: 'userProposalValidationParams', type: 'bytes' }
+      ];
+
+      const values = [
+        data2propose.author,
+        data2propose.metadataURI,
+        data2propose.executionStrategy,
+        data2propose.userProposalValidationParams
+      ];
+
+      const encodedData = encodeAbiParameters(params, values);
+
+      const publicClient = createPublicClient({
+        chain: baseSepolia,
+        transport: custom(ethereumProvider)
+      });
+      const txHash = await walletClient.writeContract({
+        account,
+        address: deployedAddresses.vanillaAuthenticator as `0x${string}`,
+        abi: VANILLA_AUTHENTICATOR.abi,
+        functionName: 'authenticate',
+        args: [
+          deployedAddresses.spaceContract as `0x${string}`,
+          '0xaad83f3b' as `0x${string}`,
+          encodedData
+        ]
+      });
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+      // Store proposal in localStorage for instant UI feedback
+      const localKey = `localProposals:${deployedAddresses.spaceContract}`;
+      const localProposals = JSON.parse(localStorage.getItem(localKey) || '[]');
+      const newProposal = {
+        id: `local-${Date.now()}`,
         title,
         body,
         discussion,
-        type,
         choices,
-        privacy,
-        labels,
-        app,
-        created,
-        start,
-        min_end,
-        max_end,
-        executions
-      ),
-      {
-        safeAppContext: 'propose'
-      }
-    );
+        created: Date.now(),
+        author: { id: address },
+        state: 'pending',
+        network: space.network,
+        space: {
+          id: deployedAddresses.spaceContract,
+          name: space?.name || '',
+          avatar: space?.avatar || '',
+          network: space.network
+        },
+        // Add sensible defaults for other fields used in the UI
+        proposal_id: '',
+        execution_network: space.network,
+        isInvalid: false,
+        type,
+        quorum: 0,
+        execution_hash: '',
+        metadata_uri: '',
+        executions: [],
+        start: start || Date.now(),
+        min_end: min_end || Date.now(),
+        max_end: max_end || Date.now(),
+        snapshot: 0,
+        labels: labels || [],
+        scores: [],
+        scores_total: 0,
+        execution_time: 0,
+        execution_strategy: '',
+        execution_strategy_type: '',
+        execution_destination: '',
+        timelock_veto_guardian: '',
+        strategies_indices: [],
+        strategies: [],
+        strategies_params: [],
+        edited: null,
+        tx: '',
+        execution_tx: '',
+        veto_tx: '',
+        vote_count: 0,
+        has_execution_window_opened: false,
+        execution_ready: false,
+        vetoed: false,
+        completed: false,
+        cancelled: false,
+        privacy: privacy || 'none',
+        flagged: false
+      };
+      localProposals.push(newProposal);
+      localStorage.setItem(localKey, JSON.stringify(localProposals));
 
-    return txHash;
+      // Immediately return true after contract call
+      return true;
+    } else {
+      // fallback to old logic for non-EVM networks
+      const network = getNetwork(space.network);
+      const txHash = await wrapPromise(
+        space.network,
+        network.actions.propose(
+          auth.value.provider,
+          auth.value.connector.type,
+          auth.value.account,
+          space,
+          title,
+          body,
+          discussion,
+          type,
+          choices,
+          privacy,
+          labels,
+          app,
+          created,
+          start,
+          min_end,
+          max_end,
+          executions
+        ),
+        {
+          safeAppContext: 'propose'
+        }
+      );
+      return txHash;
+    }
   }
 
   async function updateProposal(
