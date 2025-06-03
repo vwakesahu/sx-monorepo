@@ -98,10 +98,17 @@ const votingPower = computed(() => {
   if (id.value && id.value.startsWith('local-')) {
     return {
       votingPowers: [{ value: 1n }],
-      total: 1n
+      total: 1n,
+      canVote: true
     };
   }
-  // Use backend voting power otherwise
+  // Use backend voting power but force canVote to true
+  if (backendVotingPower.value) {
+    return {
+      ...backendVotingPower.value,
+      canVote: true
+    };
+  }
   return backendVotingPower.value;
 });
 

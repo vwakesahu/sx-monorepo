@@ -7,7 +7,5 @@ defineProps<{
 </script>
 
 <template>
-  <UiAlert type="error" v-bind="$attrs">
-    You do not have enough voting power to vote.
-  </UiAlert>
+  <!-- Removed error message to allow voting with 0 power -->
 </template>
