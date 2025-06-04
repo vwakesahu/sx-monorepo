@@ -1,12 +1,19 @@
 <script setup lang="ts">
+import { Lightning } from '@inco/js/lite';
 import { useQueryClient } from '@tanstack/vue-query';
-import { LocationQueryValue } from 'vue-router';
+import { useRoute } from 'vue-router';
+import { getAddress } from 'viem';
+import { useAccount } from '@/composables/useAccount';
+import { useActions } from '@/composables/useActions';
+import { useContractWrite } from '@/composables/useContractWrite';
+import { useWeb3 } from '@/composables/useWeb3';
 import { getChoiceText, getFormattedVotingPower } from '@/helpers/utils';
 import { getValidator } from '@/helpers/validation';
 import { getNetwork, offchainNetworks } from '@/networks';
 import { PROPOSALS_KEYS } from '@/queries/proposals';
 import { useProposalVotingPowerQuery } from '@/queries/votingPower';
 import { Choice, Proposal } from '@/types';
+import { Contract } from '@ethersproject/contracts';
 
 const REASON_DEFINITION = {
   title: 'Reason',
@@ -28,10 +35,15 @@ const emit = defineEmits<{
 }>();
 
 const queryClient = useQueryClient();
-const { vote } = useActions();
 const { web3 } = useWeb3();
 const { loadVotes, votes } = useAccount();
 const route = useRoute();
+
+const proposalKey = computed(
+  () =>
+    `${props.proposal.network}:${props.proposal.space.id}:${props.proposal.id}`
+);
+
 const {
   data: votingPower,
   isPending: isVotingPowerPending,
@@ -101,14 +113,104 @@ async function handleSubmit() {
 async function voteFn() {
   if (!selectedChoice.value) return null;
 
-  const appName = (route.query.app as LocationQueryValue) || '';
+  let selectedChoiceBigInt;
 
-  return vote(
-    props.proposal,
-    selectedChoice.value,
-    form.value.reason,
-    appName.length <= 128 ? appName : ''
-  );
+  switch (selectedChoice.value) {
+    case 'for':
+      selectedChoiceBigInt = BigInt('1');
+      break;
+    case 'against':
+      selectedChoiceBigInt = BigInt('0');
+      break;
+    case 'abstain':
+      selectedChoiceBigInt = BigInt('2');
+      break;
+  }
+
+  const spaceAddress = props.proposal.space.id;
+  const incoConfig = Lightning.latest('demonet', 84532);
+  const valueBigInt = selectedChoiceBigInt;
+  const checksummedAddress = getAddress(spaceAddress);
+
+  const encryptedData = await incoConfig.encrypt(valueBigInt, {
+    accountAddress: web3.value.account,
+    dappAddress: checksummedAddress
+  });
+
+  const votingABI = [
+    {
+      inputs: [
+        {
+          internalType: 'address',
+          name: 'voter',
+          type: 'address'
+        },
+        {
+          internalType: 'uint256',
+          name: 'proposalId',
+          type: 'uint256'
+        },
+        {
+          internalType: 'bytes',
+          name: 'ciphertext',
+          type: 'bytes'
+        },
+        {
+          components: [
+            {
+              internalType: 'uint8',
+              name: 'index',
+              type: 'uint8'
+            },
+            {
+              internalType: 'bytes',
+              name: 'params',
+              type: 'bytes'
+            }
+          ],
+          internalType: 'struct IndexedStrategy[]',
+          name: 'userVotingStrategies',
+          type: 'tuple[]'
+        },
+        {
+          internalType: 'string',
+          name: 'metadataURI',
+          type: 'string'
+        }
+      ],
+      name: 'vote',
+      outputs: [],
+      stateMutability: 'nonpayable',
+      type: 'function'
+    }
+  ];
+
+  try {
+    const { writeAsync } = useContractWrite();
+    console.log('🔍 Vote Component - Full Proposal Data:', {
+      ggp: props.proposal.ggp,
+      proposal_id: props.proposal.proposal_id,
+      fullProposal: props.proposal,
+      localStorage: localStorage.getItem(proposalKey.value),
+      proposalKey: proposalKey.value
+    });
+    const { hash } = await writeAsync({
+      address: checksummedAddress,
+      abi: votingABI,
+      functionName: 'vote',
+      args: [
+        web3.value.account,
+        props.proposal.ggp,
+        encryptedData,
+        [[0, '0x']],
+        form.value.reason || ''
+      ]
+    });
+    return hash;
+  } catch (error) {
+    console.error('Error voting:', error);
+    throw error;
+  }
 }
 
 async function handleConfirmed(tx?: string | null) {

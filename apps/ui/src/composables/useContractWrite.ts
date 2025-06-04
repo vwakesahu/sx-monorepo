@@ -8,20 +8,21 @@ import {
 import { baseSepolia } from 'viem/chains';
 
 export function useContractWrite() {
-  const { web3 } = useWeb3();
+  const { web3, auth } = useWeb3();
 
   const writeAsync = async ({ address, abi, functionName, args }) => {
     if (!web3.value.account) throw new Error('No account connected');
+    if (!auth.value?.provider) throw new Error('No provider available');
 
     const publicClient = createPublicClient({
       chain: baseSepolia,
-      transport: custom(web3.value.provider)
+      transport: custom(auth.value.provider.provider)
     });
 
     const walletClient = createWalletClient({
       account: web3.value.account,
       chain: baseSepolia,
-      transport: custom(web3.value.provider)
+      transport: custom(auth.value.provider.provider)
     });
 
     const hash = await walletClient.writeContract({

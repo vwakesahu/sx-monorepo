@@ -241,6 +241,7 @@ export type ProposalExecution = {
 export type Proposal = {
   id: string;
   proposal_id: number | string;
+  ggp?: number;
   network: NetworkID;
   execution_network: NetworkID;
   /**

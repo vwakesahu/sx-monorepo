@@ -10,6 +10,10 @@ import { getNetwork, offchainNetworks } from '@/networks';
 import { PROPOSALS_KEYS } from '@/queries/proposals';
 import { usePropositionPowerQuery } from '@/queries/propositionPower';
 import { Contact, Space, Transaction, VoteType } from '@/types';
+import { createPublicClient, custom } from 'viem';
+import { baseSepolia } from 'viem/chains';
+import { getAddress } from 'viem';
+import { SPACE_CONTRACT } from '@/contracts/contract-info';
 
 const DEFAULT_VOTING_DELAY = 60 * 60 * 24 * 3;
 
@@ -40,7 +44,7 @@ const { proposals, createDraft } = useEditor();
 const route = useRoute();
 const router = useRouter();
 const { propose, updateProposal } = useActions();
-const { web3 } = useWeb3();
+const { web3, auth } = useWeb3();
 const {
   spaceKey: walletConnectSpaceKey,
   network: walletConnectNetwork,
@@ -433,69 +437,110 @@ async function handleProposeClick() {
         proposalMaxEnd.value
       );
 
-      // Detailed parameter logging before propose call
-      console.log('🔍 DETAILED PARAMETER CHECK:');
-      console.log('  - space:', props.space);
-      console.log(
-        '  - space.strategies_params:',
-        props.space.strategies_params
-      );
-      console.log('  - space.strategies:', props.space.strategies);
-      console.log('  - space.voting_types:', props.space.voting_types);
-      console.log('  - space.labels:', props.space.labels);
-      console.log('  - space.treasuries:', props.space.treasuries);
-      console.log('  - title:', proposal.value.title);
-      console.log('  - body:', proposal.value.body);
-      console.log('  - discussion:', proposal.value.discussion);
-      console.log('  - type:', proposal.value.type);
-      console.log('  - choices:', choices);
-      console.log('  - privacy:', proposal.value.privacy);
-      console.log('  - labels:', proposal.value.labels);
-      console.log('  - appName:', appName.length <= 128 ? appName : '');
-      console.log('  - unixTimestamp:', unixTimestamp.value);
-      console.log('  - proposalStart:', proposalStart.value);
-      console.log('  - proposalMinEnd:', proposalMinEnd.value);
-      console.log('  - proposalMaxEnd:', proposalMaxEnd.value);
-      console.log('  - executions:', executions);
+      // Get next proposal ID
+      const publicClient = createPublicClient({
+        chain: baseSepolia,
+        transport: custom(window.ethereum)
+      });
 
-      // Add safety checks for arrays that might be undefined
-      const safeLabels = proposal.value.labels || [];
-      const safeChoices = choices || [];
-      const safeExecutions = executions || [];
+      const checksummedAddress = getAddress(props.space.id);
 
-      // Create a safe space object with guaranteed array properties
-      const safeSpace = {
-        ...props.space,
-        strategies_params: props.space.strategies_params || [],
-        strategies: props.space.strategies || [],
-        voting_types: props.space.voting_types || ['basic'],
-        labels: props.space.labels || [],
-        treasuries: props.space.treasuries || []
+      const ppipp = await publicClient?.readContract({
+        address: checksummedAddress as `0x${string}`,
+        abi: SPACE_CONTRACT.abi,
+        functionName: 'nextProposalId'
+      });
+      console.log('=== PROPOSAL CREATION DEBUG ===');
+      console.log('1. Contract call result:', {
+        ppipp,
+        nextId: Number(ppipp),
+        checksummedAddress
+      });
+
+      const nextId = Number(ppipp);
+
+      // First, update the proposal object directly
+      if (proposal.value) {
+        console.log('2. Current proposal state:', proposal.value);
+
+        proposal.value.proposalId = nextId.toString();
+        proposal.value.ggp = nextId;
+        proposal.value.proposal_id = nextId.toString();
+
+        console.log('3. Updated proposal state:', proposal.value);
+      }
+
+      // Create the data to store in localStorage
+      const localStorageData = {
+        ...proposal.value,
+        ggp: nextId,
+        proposal_id: nextId.toString(),
+        proposalId: nextId.toString()
       };
 
-      console.log('🛡️ SAFE PARAMETERS:');
-      console.log('  - safeSpace:', safeSpace);
-      console.log('  - safeLabels:', safeLabels);
-      console.log('  - safeChoices:', safeChoices);
-      console.log('  - safeExecutions:', safeExecutions);
+      console.log('4. Data to be stored in localStorage:', localStorageData);
+
+      // Save to localStorage BEFORE creating the proposal
+      localStorage.setItem(proposalKey.value, JSON.stringify(localStorageData));
+
+      // Verify localStorage
+      const storedData = localStorage.getItem(proposalKey.value);
+      console.log('5. Data in localStorage:', {
+        key: proposalKey.value,
+        stored: storedData,
+        parsed: JSON.parse(storedData || '{}')
+      });
+
+      if (!proposal.value) {
+        console.error('No proposal value available');
+        return;
+      }
+
+      // Create the proposal
+      console.log('6. Creating proposal with data:', {
+        title: proposal.value.title,
+        body: proposal.value.body,
+        discussion: proposal.value.discussion,
+        type: proposal.value.type,
+        choices,
+        privacy: proposal.value.privacy,
+        labels: proposal.value.labels || [],
+        ggp: nextId,
+        proposal_id: nextId.toString()
+      });
 
       result = await propose(
-        safeSpace,
+        props.space,
         proposal.value.title,
         proposal.value.body,
         proposal.value.discussion,
         proposal.value.type,
-        safeChoices,
+        choices,
         proposal.value.privacy,
-        safeLabels,
+        proposal.value.labels || [],
         appName.length <= 128 ? appName : '',
         unixTimestamp.value,
         proposalStart.value,
         proposalMinEnd.value,
         proposalMaxEnd.value,
-        safeExecutions
+        executions || []
       );
-      console.log('✅ Create proposal result:', result);
+
+      if (result) {
+        // Update localStorage one final time to ensure data persists
+        localStorage.setItem(
+          proposalKey.value,
+          JSON.stringify(localStorageData)
+        );
+
+        // Log the final state
+        console.log('7. Final state after proposal creation:', {
+          proposal: proposal.value,
+          localStorage: localStorage.getItem(proposalKey.value),
+          result
+        });
+      }
+      console.log('=== END PROPOSAL CREATION DEBUG ===');
     }
 
     if (result) {

@@ -6,7 +6,7 @@ import {
   encodeAbiParameters
 } from 'viem';
 import { baseSepolia } from 'viem/chains';
-import { VANILLA_AUTHENTICATOR } from '@/contracts/contract-info';
+import { SPACE_CONTRACT, VANILLA_AUTHENTICATOR } from '@/contracts/contract-info';
 import { getDelegationNetwork } from '@/helpers/delegation';
 import { registerTransaction } from '@/helpers/mana';
 import { isUserAbortError } from '@/helpers/utils';
@@ -448,6 +448,13 @@ export function useActions() {
         chain: baseSepolia,
         transport: custom(ethereumProvider)
       });
+
+      const ggp = await publicClient.readContract({
+        address: deployedAddresses.spaceContract as `0x${string}`,
+        abi: SPACE_CONTRACT.abi,
+        functionName: 'nextProposalId'
+      });
+
       const txHash = await walletClient.writeContract({
         account,
         address: deployedAddresses.vanillaAuthenticator as `0x${string}`,
@@ -461,6 +468,8 @@ export function useActions() {
       });
       await publicClient.waitForTransactionReceipt({ hash: txHash });
 
+      
+
       // Store proposal in localStorage for instant UI feedback
       const localKey = `localProposals:${deployedAddresses.spaceContract}`;
       const localProposals = JSON.parse(localStorage.getItem(localKey) || '[]');
@@ -468,6 +477,7 @@ export function useActions() {
         id: `local-${Date.now()}`,
         title,
         body,
+        ggp: Number(ggp),
         discussion,
         choices,
         created: Date.now(),
