@@ -88,7 +88,7 @@ const {
   isError: backendIsVotingPowerError,
   refetch: fetchVotingPower
 } = useProposalVotingPowerQuery(
-  toRef(() => web3.value.account),
+  toRef(() => web3.account),
   toRef(() => proposal.value),
   toRef(() => ['active', 'pending'].includes(proposal.value?.state || ''))
 );
@@ -162,7 +162,7 @@ async function handleVoteClick(choice: Choice) {
     modalOpenVote.value = true;
     return;
   }
-  if (!web3.value.account) {
+  if (!web3.account) {
     modalAccountOpen.value = true;
     return;
   }
@@ -351,7 +351,17 @@ const executeProposal = () => {
         </UiScrollerHorizontal>
         <router-view :proposal="proposal" />
         <div v-if="discussion" class="px-4 mt-6">
-          <UiButton size="sm" variant="secondary" @click="executeProposal">
+          <UiButton
+            v-if="
+              proposal.author &&
+              proposal.author.id &&
+              web3.account &&
+              proposal.author.id.toLowerCase() === web3.account.toLowerCase()
+            "
+            size="sm"
+            variant="secondary"
+            @click="executeProposal"
+          >
             Execute
           </UiButton>
         </div>
