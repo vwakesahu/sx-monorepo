@@ -6,6 +6,10 @@ import { getFormattedVotingPower, sanitizeUrl } from '@/helpers/utils';
 import { useProposalQuery } from '@/queries/proposals';
 import { useProposalVotingPowerQuery } from '@/queries/votingPower';
 import { Choice, Space } from '@/types';
+import { useContractWrite } from '@/composables/useContractWrite';
+import { SPACE_CONTRACT } from '@/contracts/contract-info';
+import { createPublicClient, custom } from 'viem';
+import { baseSepolia } from 'viem/chains';
 
 const props = defineProps<{
   space: Space;
@@ -27,6 +31,9 @@ const { votes } = useAccount();
 const editMode = ref(false);
 const discourseTopic: Ref<Topic | null> = ref(null);
 const boostCount = ref(0);
+const isExecuting = ref(false);
+const executeError = ref<string | null>(null);
+const executionHash = ref<string | null>(null);
 
 const id = computed(() => route.params.proposal as string);
 
@@ -256,8 +263,72 @@ onMounted(() => {
   }
 });
 
-const executeProposal = () => {
-  alert('Execute proposal logic goes here!');
+const executeProposal = async () => {
+  isExecuting.value = true;
+  executeError.value = null;
+  executionHash.value = null;
+
+  try {
+    const spaceContractAddress = proposal.value.space.id as `0x${string}`;
+    const proposalId =
+      proposal.value.ggp ||
+      proposal.value.proposal_id ||
+      proposal.value.proposalId;
+    const executionPayload = '0x';
+
+    const { writeAsync } = useContractWrite();
+    const { hash, data: receipt } = await writeAsync({
+      address: spaceContractAddress,
+      abi: SPACE_CONTRACT.abi,
+      functionName: 'tryExecute',
+      args: [proposalId, executionPayload]
+    });
+
+    executionHash.value = hash;
+
+    if (receipt && receipt.status === 'success') {
+      const publicClient = createPublicClient({
+        chain: baseSepolia,
+        transport: custom(window.ethereum)
+      });
+
+      const eventPromise = new Promise<{ event: any; timedOut: boolean }>(
+        (resolve, reject) => {
+          const unwatch = publicClient.watchContractEvent({
+            address: spaceContractAddress,
+            abi: SPACE_CONTRACT.abi,
+            eventName: 'ProposalExecuted',
+            args: { proposalId: BigInt(proposalId) },
+            onLogs: logs => {
+              unwatch?.();
+              resolve({ event: logs[0], timedOut: false });
+            },
+            onError: error => {
+              unwatch?.();
+              reject(error);
+            }
+          });
+          setTimeout(() => {
+            unwatch?.();
+            resolve({ event: null, timedOut: true });
+          }, 6000);
+        }
+      );
+      const { event, timedOut } = await eventPromise;
+      if (timedOut) {
+        executeError.value = 'Timed out waiting for ProposalExecuted event';
+      } else {
+        console.log('ProposalExecuted event received:', event);
+      }
+    } else {
+      executeError.value = 'Transaction failed or was reverted';
+    }
+  } catch (error) {
+    console.error(error);
+    executeError.value = 'Failed to execute proposal';
+  } finally {
+    isExecuting.value = false;
+  }
 };
 </script>
 
@@ -360,10 +431,17 @@ const executeProposal = () => {
             "
             size="sm"
             variant="secondary"
+            :loading="isExecuting"
             @click="executeProposal"
           >
             Execute
           </UiButton>
+          <div v-if="executeError" class="text-red-500 text-xs mt-2">
+            {{ executeError }}
+          </div>
+          <div v-if="executionHash" class="text-green-600 text-xs mt-2">
+            Tx: {{ executionHash }}
+          </div>
         </div>
       </div>
 
