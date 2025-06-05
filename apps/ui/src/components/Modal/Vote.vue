@@ -64,6 +64,8 @@ const modalTransactionOpen = ref(false);
 const modalShareOpen = ref(false);
 const txId = ref<string | null>(null);
 const selectedChoice = ref<Choice | null>(null);
+const txError = ref<string | null>(null);
+const txSuccess = ref(false);
 
 const formValidator = getValidator({
   $async: true,
@@ -194,7 +196,7 @@ async function voteFn() {
       localStorage: localStorage.getItem(proposalKey.value),
       proposalKey: proposalKey.value
     });
-    const { hash } = await writeAsync({
+    const { hash, data: receipt } = await writeAsync({
       address: checksummedAddress,
       abi: votingABI,
       functionName: 'vote',
@@ -206,9 +208,19 @@ async function voteFn() {
         form.value.reason || ''
       ]
     });
-    return hash;
+
+    if (receipt && receipt.status === 'success') {
+      txSuccess.value = true;
+      txError.value = null;
+      return hash;
+    } else {
+      txSuccess.value = false;
+      txError.value = 'Transaction failed or was reverted';
+      throw new Error('Transaction failed or was reverted');
+    }
   } catch (error) {
-    console.error('Error voting:', error);
+    txError.value = error?.message || 'Transaction failed';
+    txSuccess.value = false;
     throw error;
   }
 }
@@ -219,15 +231,15 @@ async function handleConfirmed(tx?: string | null) {
     txId.value = tx;
   }
 
-  emit('voted');
-  emit('close');
-
-  modalShareOpen.value = true;
+  if (txSuccess.value) {
+    emit('voted');
+    emit('close');
+    modalShareOpen.value = true;
+  }
   hidden.value = false;
   loading.value = false;
 
-  // TODO: Quick fix only for offchain proposals, need a more complete solution for onchain proposals
-  if (offchainProposal.value) {
+  if (offchainProposal.value && txSuccess.value) {
     queryClient.invalidateQueries({
       queryKey: PROPOSALS_KEYS.detail(
         props.proposal.network,
@@ -341,6 +353,18 @@ watchEffect(async () => {
     </template>
   </UiModal>
 
+  <UiModal v-if="txError" :open="!!txError" @close="txError = null">
+    <template #header>
+      <h3>Vote Failed</h3>
+    </template>
+    <div class="m-4">
+      <p>{{ txError }}</p>
+    </div>
+    <template #footer>
+      <UiButton @click="txError = null">Close</UiButton>
+    </template>
+  </UiModal>
+
   <teleport to="#modal">
     <ModalTransactionProgress
       :open="modalTransactionOpen"
@@ -354,6 +378,7 @@ watchEffect(async () => {
       @close="modalTransactionOpen = false"
     />
     <ModalShare
+      v-if="txSuccess"
       :open="modalShareOpen"
       :tx-id="txId"
       :show-icon="true"
