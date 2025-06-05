@@ -255,6 +255,10 @@ onMounted(() => {
     }
   }
 });
+
+const executeProposal = () => {
+  alert('Execute proposal logic goes here!');
+};
 </script>
 
 <template>
@@ -346,6 +350,11 @@ onMounted(() => {
           </div>
         </UiScrollerHorizontal>
         <router-view :proposal="proposal" />
+        <div v-if="discussion" class="px-4 mt-6">
+          <UiButton size="sm" variant="secondary" @click="executeProposal">
+            Execute
+          </UiButton>
+        </div>
       </div>
 
       <UiResizableHorizontal
