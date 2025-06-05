@@ -46,96 +46,40 @@ const { fetchNextPage, hasNextPage, isPending, isError, isFetchingNextPage } =
     }
   );
 
-const localKey = computed(() => `localProposals:${props.space.id}`);
 const localProposals = computed(() => {
-  try {
-    return JSON.parse(localStorage.getItem(localKey.value) || '[]');
-  } catch {
-    return [];
+  const id = props.space.id;
+  const keysToTry = [
+    `localProposals:${id}`,
+    `localProposals:${id.replace(/^s:/, '')}`,
+    `localProposals:${id.replace(/^s:/, 'base-sep:')}`,
+    `localProposals:${id.replace(/^base-sep:/, '')}`
+  ];
+  // Debug: log all localStorage keys and values
+  console.log('All localStorage keys:', Object.keys(localStorage));
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('localProposals')) {
+      console.log('localStorage', key, localStorage.getItem(key));
+    }
   }
-});
-const latestLocalProposal = computed(() => {
-  const local = localProposals.value;
-  if (local.length) {
-    const sorted = local.sort((a, b) => b.created - a.created);
-    console.log('DEBUG: Showing local proposal', sorted[0]);
-    return [sorted[0]];
+  for (const key of keysToTry) {
+    try {
+      const proposals = JSON.parse(localStorage.getItem(key) || '[]');
+      if (proposals.length) {
+        // Normalize author field to always be { id: ... } and sort by created desc
+        const normalized = proposals
+          .map(p => ({
+            ...p,
+            author: typeof p.author === 'string' ? { id: p.author } : p.author
+          }))
+          .sort((a, b) => (b.created || 0) - (a.created || 0));
+        console.log('Returning proposals from key:', key, normalized);
+        return normalized;
+      }
+    } catch (e) {
+      console.log('Error parsing proposals from key:', key, e);
+    }
   }
-  // Robust fallback matching
-  const normalizedSpaceId = (
-    (props.space as any).spaceContractAddress ||
-    props.space.id ||
-    ''
-  )
-    .toLowerCase()
-    .replace(/^s:/, '')
-    .replace(/^base-sep:/, '');
-  console.log('DEBUG: deployedSpaces', deployedSpaces.value);
-  console.log('DEBUG: props.space', props.space);
-  console.log('DEBUG: normalizedSpaceId', normalizedSpaceId);
-  const deployed = deployedSpaces.value.find(
-    s =>
-      (s.spaceContractAddress || '')
-        .toLowerCase()
-        .replace(/^s:/, '')
-        .replace(/^base-sep:/, '') === normalizedSpaceId
-  );
-  if (deployed) {
-    const fakeProposal = {
-      id: 'fake',
-      title: 'No proposals yet',
-      body: deployed.description || '',
-      discussion: '',
-      choices: ['For', 'Against', 'Abstain'],
-      created: Date.now(),
-      author: { id: deployed.creatorAddress || '0x0' },
-      state: 'pending',
-      space: {
-        id: deployed.spaceContractAddress,
-        name: deployed.name,
-        avatar: deployed.icon,
-        network: deployed.network
-      },
-      proposal_id: '',
-      execution_network: deployed.network,
-      isInvalid: false,
-      type: (deployed.voting_types && deployed.voting_types[0]) || 'basic',
-      quorum: 0,
-      execution_hash: '',
-      metadata_uri: '',
-      executions: [],
-      start: Date.now(),
-      min_end: Date.now(),
-      max_end: Date.now(),
-      snapshot: 0,
-      labels: deployed.labels || [],
-      scores: [],
-      scores_total: 0,
-      execution_time: 0,
-      execution_strategy: '',
-      execution_strategy_type: '',
-      execution_destination: '',
-      timelock_veto_guardian: '',
-      strategies_indices: [],
-      strategies: [],
-      strategies_params: [],
-      edited: null,
-      tx: '',
-      execution_tx: '',
-      veto_tx: '',
-      vote_count: 0,
-      has_execution_window_opened: false,
-      execution_ready: false,
-      vetoed: false,
-      completed: false,
-      cancelled: false,
-      privacy: deployed.privacy || 'none',
-      flagged: false
-    };
-    console.log('DEBUG: Showing fake proposal', fakeProposal);
-    return [fakeProposal];
-  }
-  console.log('DEBUG: No proposals or deployed match found');
+  console.log('No proposals found for keys:', keysToTry);
   return [];
 });
 
@@ -325,10 +269,25 @@ watchEffect(() => setTitle(`Proposals - ${props.space.name}`));
       :is-error="isError"
       :loading="isPending"
       :loading-more="isFetchingNextPage"
-      :proposals="latestLocalProposal"
+      :proposals="localProposals"
       @end-reached="handleEndReached"
-    />
-    <div v-if="!latestLocalProposal.length">
+    >
+      <template #item="{ proposal }">
+        <router-link
+          :to="{
+            name: 'space-proposal-overview',
+            params: {
+              proposal: proposal.id,
+              space: `${props.space.network}:${props.space.id}`,
+              user: proposal.author?.id || web3.account || '0x0'
+            }
+          }"
+        >
+          {{ proposal.title || 'Untitled Proposal' }}
+        </router-link>
+      </template>
+    </ProposalsList>
+    <div v-if="!localProposals.length">
       <div class="px-4 py-3 flex items-center text-skin-link gap-2">
         <IH-exclamation-circle />
         <span>There are no proposals here.</span>

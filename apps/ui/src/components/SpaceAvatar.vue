@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getCacheHash } from '@/helpers/utils';
+import { getCacheHash, getStampUrl } from '@/helpers/utils';
 import { NetworkID } from '@/types';
 import { computed } from 'vue';
 
@@ -31,11 +31,35 @@ const spaceId = computed(() => {
   }
   return `${props.space.network}:${props.space.id}`;
 });
+
+// Check if avatar is an external URL
+const isExternalUrl = computed(() => {
+  return props.space.avatar && (
+    props.space.avatar.startsWith('http://') ||
+    props.space.avatar.startsWith('https://')
+  );
+});
 </script>
 
 <template>
   <div class="relative w-fit">
+    <!-- Handle external URLs directly -->
+    <img
+      v-if="space.avatar && isExternalUrl"
+      v-bind="$attrs"
+      :src="space.avatar"
+      :width="size"
+      :height="size"
+      class="rounded-full inline-block bg-skin-border object-cover"
+      :style="{
+        width: `${size}px`,
+        height: `${size}px`
+      }"
+    />
+
+    <!-- Keep original UiStamp logic for internal images or when no avatar -->
     <UiStamp
+      v-else
       v-bind="$attrs"
       :id="spaceId"
       :size="size"
@@ -43,6 +67,8 @@ const spaceId = computed(() => {
       class="!bg-skin-bg"
       type="space"
     />
+
+    <!-- Keep active proposals badge exactly as original -->
     <div
       v-if="showActiveProposals && space.active_proposals"
       class="h-[20px] min-w-[20px] absolute px-1 -bottom-2 -right-2 text-white bg-skin-success rounded-full flex items-center justify-center text-[12px] font-bold border-2 border-skin-bg"

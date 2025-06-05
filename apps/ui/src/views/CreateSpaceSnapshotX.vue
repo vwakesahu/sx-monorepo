@@ -71,18 +71,18 @@ useTitle('Create space');
 
 const metadataForm: SpaceMetadata = reactive(
   clone({
-    name: 'Vivek',
+    name: 'Inco',
     avatar:
-      'https://pbs.twimg.com/profile_images/1895533022537269248/rNwE1gM6_400x400.jpg',
+      'https://pbs.twimg.com/profile_images/1909850439786659841/nfws7K_i_400x400.jpg',
     cover:
-      'https://pbs.twimg.com/profile_banners/1346307824234672129/1739284133/1500x500',
-    description: 'DOMinator @inconetwork Debugging @whatwasthatmeme',
+      'https://pbs.twimg.com/profile_banners/1698445642714976256/1747736922/1500x500',
+    description: 'Confidential DAO',
     externalUrl: '',
     twitter: '',
     github: '',
     discord: '',
     terms: '',
-    votingPowerSymbol: 'VP',
+    votingPowerSymbol: '',
     treasuries: [],
     labels: [],
     delegations: []
@@ -164,6 +164,8 @@ const storeDeployedAddresses = addresses => {
     protocol: 'snapshot_x',
     network: 'base-sepolia',
     name: profileData.name,
+    cover: profileData.cover,
+    avatar: profileData.avatar,
     description: profileData.description,
     icon: profileData.avatar,
     createdAt: new Date().toISOString(),
@@ -188,7 +190,6 @@ const storeDeployedAddresses = addresses => {
 const initialize = async contractAddress => {
   isInitializing.value = true;
   try {
-    // ... existing initialization logic ...
     const data0 = {
       addr: contractAddress?.vanillaProposalValidationStrategy,
       params: '0x'

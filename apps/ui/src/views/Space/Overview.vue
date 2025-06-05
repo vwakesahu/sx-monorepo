@@ -30,8 +30,9 @@ const showChildren = computed(
     props.space.children.every(child => child.name)
 );
 
-// Check if this is a local space
-const isLocalSpace = computed(() => !!props.space.spaceContractAddress);
+const handletest = () => {
+  console.log(props.space);
+};
 
 watchEffect(() => setTitle(props.space.name));
 </script>
@@ -44,6 +45,7 @@ watchEffect(() => setTitle(props.space.name));
       <div class="size-full overflow-hidden">
         <SpaceCover :space="props.space" />
       </div>
+
       <div
         class="relative bg-skin-bg h-[16px] -top-3 rounded-t-[16px] md:hidden"
       />

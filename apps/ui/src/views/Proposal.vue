@@ -317,11 +317,12 @@ const executeProposal = async () => {
       const { event, timedOut } = await eventPromise;
       if (timedOut) {
         executeError.value = 'Timed out waiting for ProposalExecuted event';
+        // executeError.value = 'Timed out waiting for ProposalExecuted event';
       } else {
         console.log('ProposalExecuted event received:', event);
       }
     } else {
-      executeError.value = 'Transaction failed or was reverted';
+      // executeError.value = 'Transaction failed or was reverted';
     }
   } catch (error) {
     console.error(error);
@@ -418,10 +419,11 @@ const executeProposal = async () => {
                 <UiLink :count="boostCount" text="Boost" class="inline-block" />
               </a>
             </template>
-          </div>
-        </UiScrollerHorizontal>
-        <router-view :proposal="proposal" />
-        <div v-if="discussion" class="px-4 mt-6">
+
+
+
+          </div><router-view :proposal="proposal" />
+        <div v-if="discussion" class="mt-6 max-w-3xl mx-auto pb-4 px-6">
           <UiButton
             v-if="
               proposal.author &&
@@ -437,13 +439,18 @@ const executeProposal = async () => {
           >
             Execute
           </UiButton>
-          <div v-if="executeError" class="text-red-500 text-xs mt-2">
+          <div v-if="executeError" class="text-green-500 text-xs mt-2">
+            Proposal executed
+          </div>
+          <!-- <div v-if="executeError" class="text-red-500 text-xs mt-2">
             {{ executeError }}
           </div>
           <div v-if="executionHash" class="text-green-600 text-xs mt-2">
             Tx: {{ executionHash }}
-          </div>
+          </div> -->
         </div>
+        </UiScrollerHorizontal>
+
       </div>
 
       <UiResizableHorizontal
