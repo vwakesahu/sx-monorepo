@@ -468,8 +468,6 @@ export function useActions() {
       });
       await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-      
-
       // Store proposal in localStorage for instant UI feedback
       const localKey = `localProposals:${deployedAddresses.spaceContract}`;
       const localProposals = JSON.parse(localStorage.getItem(localKey) || '[]');
