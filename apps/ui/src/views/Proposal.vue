@@ -429,6 +429,7 @@ const executeProposal = async () => {
               web3.account &&
               proposal.author.id.toLowerCase() === web3.account.toLowerCase()
             "
+            type="button"
             size="sm"
             variant="secondary"
             :loading="isExecuting"
