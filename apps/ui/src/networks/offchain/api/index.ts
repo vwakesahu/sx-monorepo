@@ -23,7 +23,6 @@ import {
 } from '@/networks/types';
 import {
   Alias,
-  Follow,
   Member,
   NetworkID,
   OffchainAdditionalRawData,
@@ -43,6 +42,7 @@ import {
   Vote
 } from '@/types';
 import {
+  ALIASES_BY_ADDRESS_QUERY,
   ALIASES_QUERY,
   LEADERBOARD_QUERY,
   NETWORKS_QUERY,
@@ -65,6 +65,7 @@ import {
   ApiProposal,
   ApiRelatedSpace,
   ApiSpace,
+  ApiStatement,
   ApiStrategy,
   ApiVote
 } from './types';
@@ -130,12 +131,15 @@ function getAuthorRole(
     members: string[];
   }
 ): Member['role'] | null {
-  if (admins.some(address => compareAddresses(address, authorAddress)))
+  if (admins.some(address => compareAddresses(address, authorAddress))) {
     return 'admin';
-  if (moderators.some(address => compareAddresses(address, authorAddress)))
+  }
+  if (moderators.some(address => compareAddresses(address, authorAddress))) {
     return 'moderator';
-  if (members.some(address => compareAddresses(address, authorAddress)))
+  }
+  if (members.some(address => compareAddresses(address, authorAddress))) {
     return 'author';
+  }
 
   return null;
 }
@@ -187,7 +191,9 @@ function formatSpace(
     };
   }
 
-  function formatSkinSettings(skinSettings: SkinSettings): SkinSettings {
+  function formatSkinSettings(
+    skinSettings: ApiSpace['skinSettings']
+  ): SkinSettings {
     return {
       bg_color: skinSettings?.bg_color || '',
       link_color: skinSettings?.link_color || '',
@@ -197,6 +203,11 @@ function formatSpace(
       heading_color: skinSettings?.heading_color || '',
       primary_color: skinSettings?.primary_color || '',
       theme: skinSettings?.theme || 'light',
+      // pass the hub's null through unchanged. clone() is a JSON round-trip,
+      // which drops undefined keys but keeps null ones, and the settings page
+      // objectHash-compares this object against its own clone to decide
+      // whether the form is modified. Coercing to undefined makes every space
+      // with no skins row look modified the moment the page loads.
       logo: skinSettings?.logo
     };
   }
@@ -233,10 +244,10 @@ function formatSpace(
     turbo_expiration: space.turboExpiration,
     controller: '',
     snapshot_chain_id: space.network,
-    name: space.name || '',
-    avatar: space.avatar || '',
+    name: space.name,
+    avatar: space.avatar,
     cover: space.cover || '',
-    about: space.about || '',
+    about: space.about,
     external_url: space.website || '',
     github: space.github || '',
     twitter: space.twitter || '',
@@ -280,7 +291,7 @@ function formatSpace(
     voting_power_validation_strategies_parsed_metadata: [],
     children: space.children.map(formatRelatedSpace),
     parent: space.parent ? formatRelatedSpace(space.parent) : null,
-    terms: space.terms,
+    terms: space.terms ?? '',
     privacy: space.voting.privacy || 'none',
     guidelines: space.guidelines,
     template: space.template,
@@ -411,8 +422,11 @@ function formatProposal(proposal: ApiProposal, networkId: NetworkID): Proposal {
     created: proposal.created,
     edited: proposal.updated,
     start: proposal.start,
+    start_block_number: null,
     min_end: proposal.end,
+    min_end_block_number: null,
     max_end: proposal.end,
+    max_end_block_number: null,
     snapshot: proposal.snapshot,
     quorum: proposal.quorum,
     quorum_type: proposal.quorumType,
@@ -442,13 +456,12 @@ function formatProposal(proposal: ApiProposal, networkId: NetworkID): Proposal {
       executors_types: [],
       strategies_parsed_metadata: [],
       labels: proposal.space.labels,
-      terms: proposal.space.terms
+      terms: proposal.space.terms ?? ''
     },
     execution_strategy_type: executionType,
     has_execution_window_opened: state === 'passed',
     // NOTE: ignored
     execution_network: networkId,
-    execution_ready: false,
     execution_hash: '',
     execution_time: 0,
     execution_strategy: '',
@@ -467,7 +480,8 @@ function formatProposal(proposal: ApiProposal, networkId: NetworkID): Proposal {
     privacy: proposal.privacy || 'none',
     flagged: proposal.flagged,
     flag_code: proposal.flagCode,
-    plugins: proposal.plugins
+    plugins: proposal.plugins,
+    app: proposal.app
   };
 }
 
@@ -485,7 +499,8 @@ function formatVote(vote: ApiVote): Vote {
     vp: vote.vp,
     reason: vote.reason,
     created: vote.created,
-    tx: vote.ipfs
+    tx: vote.ipfs,
+    app: vote.app
   };
 }
 
@@ -591,6 +606,22 @@ function formatStrategy(strategy: ApiStrategy): StrategyTemplate {
   };
 }
 
+function formatStatement(
+  statement: ApiStatement,
+  networkId: NetworkID
+): Statement {
+  return {
+    space: statement.space,
+    network: networkId,
+    delegate: statement.delegate,
+    about: statement.about ?? '',
+    statement: statement.statement ?? '',
+    discourse: statement.discourse ?? '',
+    status: statement.status,
+    source: statement.source
+  };
+}
+
 export function createApi(
   uri: string,
   networkId: NetworkID,
@@ -677,7 +708,10 @@ export function createApi(
         filters.choice = 3;
       }
 
-      const [orderBy, orderDirection] = sortBy.split('-');
+      const [orderBy, orderDirection] = sortBy.split('-') as [
+        string,
+        'asc' | 'desc'
+      ];
 
       const { data } = await apollo.query({
         query: VOTES_QUERY,
@@ -774,7 +808,7 @@ export function createApi(
         }
       });
 
-      return data.proposals.map(proposal =>
+      return (data.proposals as ApiProposal[]).map(proposal =>
         formatProposal(proposal, networkId)
       );
     },
@@ -784,18 +818,14 @@ export function createApi(
     ): Promise<Proposal | null> => {
       const { data } = await apollo.query({
         query: PROPOSAL_QUERY,
-        variables: { id: proposalId }
+        variables: { id: String(proposalId) }
       });
 
-      if (
-        !data.proposal ||
-        data.proposal.metadata === null ||
-        data.proposal.space?.id !== spaceId
-      ) {
+      if (!data.proposal || data.proposal.space?.id !== spaceId) {
         return null;
       }
 
-      return formatProposal(data.proposal, networkId);
+      return formatProposal(data.proposal as ApiProposal, networkId);
     },
     loadSpaces: async (
       { limit, skip = 0 }: PaginationOpts,
@@ -824,7 +854,7 @@ export function createApi(
             where
           }
         });
-        return data.ranking.items.map(space =>
+        return (data.ranking.items as ApiSpace[]).map(space =>
           formatSpace(space, networkId, constants)
         );
       }
@@ -840,7 +870,9 @@ export function createApi(
         }
       });
 
-      return data.spaces.map(space => formatSpace(space, networkId, constants));
+      return (data.spaces as ApiSpace[]).map(space =>
+        formatSpace(space, networkId, constants)
+      );
     },
     loadSpace: async (id: string): Promise<Space | null> => {
       const { data } = await apollo.query({
@@ -849,33 +881,29 @@ export function createApi(
       });
 
       if (!data.space) return null;
-      if (data.space.metadata === null) return null;
 
-      return formatSpace(data.space, networkId, constants);
+      return formatSpace(data.space as ApiSpace, networkId, constants);
     },
     loadUser: async (id: string): Promise<User> => {
-      let {
+      const {
         data: { user }
       } = await apollo.query({
         query: USER_QUERY,
         variables: { id }
       });
 
-      if (!user) {
-        user = { id };
-      }
-
       return {
         ...user,
-        created: user.created || null,
-        name: user.name || (await getNames([user.id]))?.[user.id] || '',
-        about: user.about || '',
-        avatar: user.avatar || '',
-        cover: user.cover || '',
-        twitter: user.twitter || '',
-        github: user.github || '',
-        lens: user.lens || '',
-        farcaster: user.farcaster || ''
+        id,
+        created: user?.created || null,
+        name: user?.name || (await getNames([id]))?.[id] || '',
+        about: user?.about || '',
+        avatar: user?.avatar || '',
+        cover: user?.cover || '',
+        twitter: user?.twitter || '',
+        github: user?.github || '',
+        lens: user?.lens || '',
+        farcaster: user?.farcaster || ''
       };
     },
     loadUserActivities(userId: string): Promise<UserActivity[]> {
@@ -893,7 +921,8 @@ export function createApi(
           }
         })
         .then(({ data }) =>
-          data.leaderboards.map((leaderboard: any) => ({
+          data.leaderboards.map(leaderboard => ({
+            id: leaderboard.user,
             spaceId: `${networkId}:${leaderboard.space}`,
             vote_count: leaderboard.votesCount,
             proposal_count: leaderboard.proposalsCount
@@ -930,7 +959,7 @@ export function createApi(
           }
         })
         .then(({ data }) =>
-          data.leaderboards.map((leaderboard: any) => ({
+          data.leaderboards.map(leaderboard => ({
             id: leaderboard.user,
             spaceId: leaderboard.space,
             vote_count: leaderboard.votesCount,
@@ -938,24 +967,18 @@ export function createApi(
           }))
         );
     },
-    loadFollows: async (
-      userId?: string,
-      spaceId?: string
-    ): Promise<Follow[]> => {
-      const {
-        data: { follows }
-      }: { data: { follows: Follow[] } } = await apollo.query({
+    loadFollows: async (userId: string) => {
+      const { data } = await apollo.query({
         query: USER_FOLLOWS_QUERY,
         variables: {
           first: 25,
-          follower: userId,
-          space: spaceId
+          follower: userId
         }
       });
 
-      return follows.map(follow => ({
+      return data.follows.map(follow => ({
         ...follow,
-        space: { ...follow.space, network: follow.network }
+        space: { ...follow.space, network: follow.network as NetworkID }
       }));
     },
     loadAlias: async (
@@ -965,7 +988,7 @@ export function createApi(
     ): Promise<Alias | null> => {
       const {
         data: { aliases }
-      }: { data: { aliases: Alias[] } } = await apollo.query({
+      } = await apollo.query({
         query: ALIASES_QUERY,
         variables: {
           address,
@@ -976,14 +999,22 @@ export function createApi(
 
       return aliases?.[0] ?? null;
     },
+    loadAliases: async (address: string): Promise<Alias[]> => {
+      const {
+        data: { aliases }
+      } = await apollo.query({
+        query: ALIASES_BY_ADDRESS_QUERY,
+        variables: { address }
+      });
+
+      return aliases ?? [];
+    },
     loadStatement: async (
       networkId: NetworkID,
       spaceId: string,
       userId: string
     ): Promise<Statement | null> => {
-      const {
-        data: { statements }
-      }: { data: { statements: Statement[] } } = await apollo.query({
+      const { data } = await apollo.query({
         query: STATEMENTS_QUERY,
         variables: {
           where: {
@@ -994,16 +1025,16 @@ export function createApi(
         }
       });
 
-      return statements?.[0] ?? null;
+      const statement = data.statements[0] as ApiStatement | undefined;
+
+      return statement ? formatStatement(statement, networkId) : null;
     },
     loadStatements: async (
       networkId: NetworkID,
       spaceId: string,
       userIds: string[]
     ): Promise<Statement[]> => {
-      const {
-        data: { statements }
-      }: { data: { statements: Statement[] } } = await apollo.query({
+      const { data } = await apollo.query({
         query: STATEMENTS_QUERY,
         variables: {
           where: {
@@ -1014,16 +1045,16 @@ export function createApi(
         }
       });
 
-      return statements;
+      return (data.statements as ApiStatement[]).map(statement =>
+        formatStatement(statement, networkId)
+      );
     },
     loadStrategies: async () => {
       const { data } = await apollo.query({
         query: STRATEGIES_QUERY
       });
 
-      return data.strategies.map((strategy: ApiStrategy) =>
-        formatStrategy(strategy)
-      );
+      return data.strategies.map(strategy => formatStrategy(strategy));
     },
     loadStrategy: async (id: string) => {
       const { data } = await apollo.query({
@@ -1041,7 +1072,7 @@ export function createApi(
       });
 
       return Object.fromEntries(
-        data.networks.map((network: any) => [
+        data.networks.map(network => [
           network.id,
           {
             spaces_count: network.spacesCount,
@@ -1053,7 +1084,7 @@ export function createApi(
     loadSettings: async (): Promise<Setting[]> => {
       const {
         data: { options }
-      }: { data: { options: Setting[] } } = await apollo.query({
+      } = await apollo.query({
         query: SETTINGS_QUERY
       });
 

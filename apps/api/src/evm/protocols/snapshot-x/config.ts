@@ -1,6 +1,5 @@
 import { CheckpointConfig } from '@snapshot-labs/checkpoint';
 import { evmNetworks } from '@snapshot-labs/sx';
-import AxiomExecutionStrategy from './abis/AxiomExecutionStrategy';
 import L1AvatarExecutionStrategy from './abis/L1AvatarExecutionStrategy';
 import L1AvatarExecutionStrategyFactory from './abis/L1AvatarExecutionStrategyFactory';
 import ProxyFactory from './abis/ProxyFactory';
@@ -21,7 +20,8 @@ const START_BLOCKS: Record<NetworkID, number> = {
   bnb: Infinity,
   bnbt: Infinity,
   ape: 12100384,
-  curtis: 16682282
+  curtis: 16682282,
+  basesep: 44816622
 };
 
 type Config = Pick<CheckpointConfig, 'sources' | 'templates' | 'abis'> & {
@@ -44,6 +44,20 @@ export function createConfig(networkId: NetworkID): Config {
       ]
     }
   ];
+
+  if (network.Meta.incoProxyFactory) {
+    sources.push({
+      contract: network.Meta.incoProxyFactory,
+      start: START_BLOCKS[networkId],
+      abi: 'ProxyFactory',
+      events: [
+        {
+          name: 'ProxyDeployed(address,address)',
+          fn: 'handleProxyDeployed'
+        }
+      ]
+    });
+  }
 
   if (networkId === 'sep') {
     sources.push({
@@ -125,6 +139,12 @@ export function createConfig(networkId: NetworkID): Config {
             name: 'ProposalExecuted(uint256)',
             fn: 'handleProposalExecuted'
           },
+          // Inco confidential reveal; no-op on legacy chains.
+          {
+            name: 'ProposalResultRevealed(uint256,uint256,uint256,uint256,bool)',
+            fn: 'handleProposalResultRevealed'
+          },
+          // Legacy plaintext-choice VoteCasts.
           {
             name: 'VoteCast(uint256,address,uint8,uint256)',
             fn: 'handleVoteCast'
@@ -132,6 +152,16 @@ export function createConfig(networkId: NetworkID): Config {
           {
             name: 'VoteCastWithMetadata(uint256,address,uint8,uint256,string)',
             fn: 'handleVoteCast'
+          },
+          // Inco confidential VoteCasts (no `choice` arg). Different topic-0 → no
+          // collision with the legacy variants.
+          {
+            name: 'VoteCast(uint256,address,uint256)',
+            fn: 'handleConfidentialVoteCast'
+          },
+          {
+            name: 'VoteCastWithMetadata(uint256,address,uint256,string)',
+            fn: 'handleConfidentialVoteCast'
           }
         ]
       },
@@ -161,15 +191,6 @@ export function createConfig(networkId: NetworkID): Config {
           }
         ]
       },
-      AxiomExecutionStrategy: {
-        abi: 'AxiomExecutionStrategy',
-        events: [
-          {
-            name: 'WriteOffchainVotes(uint256,uint256,uint256,uint256,uint256)',
-            fn: 'handleAxiomWriteOffchainVotes'
-          }
-        ]
-      },
       L1AvatarExecutionStrategy: {
         abi: 'L1AvatarExecutionStrategy',
         events: [
@@ -185,7 +206,6 @@ export function createConfig(networkId: NetworkID): Config {
       Space,
       SimpleQuorumAvatarExecutionStrategy,
       SimpleQuorumTimelockExecutionStrategy,
-      AxiomExecutionStrategy,
       L1AvatarExecutionStrategy,
       L1AvatarExecutionStrategyFactory
     },
@@ -193,12 +213,13 @@ export function createConfig(networkId: NetworkID): Config {
       chainId: network.Meta.eip712ChainId,
       manaRpcUrl: `${MANA_URL}/eth_rpc/${network.Meta.eip712ChainId}`,
       masterSpace: network.Meta.masterSpace,
-      masterSimpleQuorumAvatar: network.ExecutionStrategies.SimpleQuorumAvatar,
+      incoMasterSpace: network.Meta.incoMasterSpace ?? null,
+      masterSimpleQuorumAvatar:
+        network.ExecutionStrategies.SimpleQuorumAvatar ?? null,
       masterSimpleQuorumTimelock:
-        network.ExecutionStrategies.SimpleQuorumTimelock,
-      masterAxiom: network.ExecutionStrategies.Axiom,
+        network.ExecutionStrategies.SimpleQuorumTimelock ?? null,
       propositionPowerValidationStrategyAddress:
-        network.ProposalValidations.VotingPower,
+        network.ProposalValidations.VotingPower ?? null,
       apeGasStrategy: network.Strategies.ApeGas ?? null,
       apeGasStrategyDelay: 20 * 5 // 20 minutes, with 5 blocks per minute
     }

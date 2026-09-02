@@ -4,6 +4,26 @@ scalar BigInt
 scalar BigDecimalVP
 
 """
+Proposal state derived from its voting window timestamps
+"""
+enum ProposalState {
+  pending
+  active
+  closed
+}
+
+"""
+SpaceImplementation stores first implementation address for a space.
+This is used to detect Space protocol at SpaceCreated.
+"""
+type SpaceImplementation {
+  "Unique identifier for the space"
+  id: String!
+  "Implementation address"
+  implementation: String!
+}
+
+"""
 Space represents a DAO or governance organization on Snapshot X
 """
 type Space {
@@ -69,6 +89,8 @@ type Space {
   proposer_count: Int!
   "Number of unique voters in this space"
   voter_count: Int!
+  "Number of currently active proposals in this space"
+  active_proposal_count: Int! @computed
   "Timestamp when the space was created"
   created: Int!
   "Transaction hash of space creation"
@@ -193,10 +215,6 @@ type ExecutionStrategy {
   timelock_veto_guardian: String
   "Delay in blocks before timelock execution can proceed"
   timelock_delay: BigInt!
-  "Axiom snapshot contract address for storage proofs (optional)"
-  axiom_snapshot_address: String
-  "Axiom snapshot storage slot for proofs (optional)"
-  axiom_snapshot_slot: BigInt
 }
 
 """
@@ -256,10 +274,6 @@ type Proposal {
   timelock_veto_guardian: String
   "Delay in blocks before timelock execution"
   timelock_delay: BigInt
-  "Axiom snapshot contract address for storage proofs"
-  axiom_snapshot_address: String
-  "Axiom snapshot storage slot for proofs"
-  axiom_snapshot_slot: BigInt
   "Array of treasury addresses involved in execution"
   treasuries: [String!]!
   "Array of strategy indices used for voting"
@@ -288,6 +302,8 @@ type Proposal {
   scores_total: BigDecimalVP!
   "Minimum voting power required for execution"
   quorum: BigDecimalVP!
+  "Whether quorum has been read at the snapshot block (OZ governors read it once on first vote)"
+  quorum_finalized: Boolean!
   "Quorum counting mode (e.g. for_only for Bravo-style where only For votes count)"
   quorum_type: String
   "Parsed total voting power as float"
@@ -304,10 +320,14 @@ type Proposal {
   veto_tx: String
   "Number of votes cast on this proposal"
   vote_count: Int!
-  "Whether proposal is ready for execution"
-  execution_ready: Boolean!
+  "Current state based on voting window timestamps"
+  state: ProposalState! @computed
   "Whether proposal has been executed"
   executed: Boolean!
+  "Confidential-voting decryption: did the encrypted For+Abstain tally reach quorum? Populated from `Space.isQuorumReached(proposalId)` on `ProposalResultRevealed`. Null for non-confidential spaces or unrevealed proposals."
+  quorum_reached: Boolean
+  "Confidential-voting decryption: did encrypted For exceed encrypted Against? Populated from `Space.isSupportAchieved(proposalId)` on `ProposalResultRevealed`. Null for non-confidential spaces or unrevealed proposals."
+  support_achieved: Boolean
   "Whether proposal has been vetoed"
   vetoed: Boolean!
   "Whether proposal execution has been settled"

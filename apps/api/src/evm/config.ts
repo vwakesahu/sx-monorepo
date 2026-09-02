@@ -1,21 +1,22 @@
 import { evmNetworks } from '@snapshot-labs/sx';
+import { getRpcUrl } from '../config';
 import { createConfig as createGovernorBravoConfig } from './protocols/governor-bravo/config';
 import { createConfig as createOpenZeppelinConfig } from './protocols/openzeppelin/config';
 import { createConfig as createSnapshotXConfig } from './protocols/snapshot-x/config';
-import { EVMConfig, NetworkID, PartialConfig, Protocols } from './types';
+import { EVMConfig, NetworkID, PartialConfig } from './types';
 import { applyConfig } from './utils';
 
-export function createConfig(
-  indexerName: NetworkID,
-  protocols: Protocols
-): EVMConfig {
+// The Edge RPC node we use for Base caps eth_getLogs at 1000 blocks
+const MAX_BLOCKS_PER_REQUEST: Partial<Record<NetworkID, number>> = {
+  base: 1000
+};
+
+export function createConfig(indexerName: NetworkID): EVMConfig {
   const network = evmNetworks[indexerName];
 
-  let snapshotXConfig: ReturnType<typeof createSnapshotXConfig> | null = null;
-  let governorBravoConfig: ReturnType<typeof createGovernorBravoConfig> | null =
-    null;
-  let openZeppelinConfig: ReturnType<typeof createOpenZeppelinConfig> | null =
-    null;
+  const snapshotXConfig = createSnapshotXConfig(indexerName);
+  const governorBravoConfig = createGovernorBravoConfig(indexerName);
+  const openZeppelinConfig = createOpenZeppelinConfig(indexerName);
 
   let partialConfig: PartialConfig = {
     sources: [],
@@ -23,41 +24,31 @@ export function createConfig(
     abis: {}
   };
 
-  if (protocols.snapshotX) {
-    snapshotXConfig = createSnapshotXConfig(indexerName);
-    partialConfig = applyConfig(partialConfig, 'snapshotX', snapshotXConfig);
+  partialConfig = applyConfig(partialConfig, 'snapshotX', snapshotXConfig);
+
+  if (governorBravoConfig) {
+    partialConfig = applyConfig(
+      partialConfig,
+      'governorBravo',
+      governorBravoConfig
+    );
   }
 
-  if (protocols.governorBravo) {
-    governorBravoConfig = createGovernorBravoConfig(indexerName);
-
-    if (governorBravoConfig) {
-      partialConfig = applyConfig(
-        partialConfig,
-        'governorBravo',
-        governorBravoConfig
-      );
-    }
-  }
-
-  if (protocols.openZeppelin) {
-    openZeppelinConfig = createOpenZeppelinConfig(indexerName);
-
-    if (openZeppelinConfig) {
-      partialConfig = applyConfig(
-        partialConfig,
-        'openZeppelin',
-        openZeppelinConfig
-      );
-    }
+  if (openZeppelinConfig) {
+    partialConfig = applyConfig(
+      partialConfig,
+      'openZeppelin',
+      openZeppelinConfig
+    );
   }
 
   return {
     indexerName,
-    network_node_url: `https://rpc.snapshot.org/${network.Meta.eip712ChainId}`,
+    network_node_url: getRpcUrl(network.Meta.eip712ChainId),
     ...partialConfig,
     state_retention_blocks: 5000,
-    snapshotXConfig: snapshotXConfig?.protocolConfig,
+    max_blocks_per_request: MAX_BLOCKS_PER_REQUEST[indexerName],
+    snapshotXConfig: snapshotXConfig.protocolConfig,
     governorBravoConfig: governorBravoConfig?.protocolConfig,
     openZeppelinConfig: openZeppelinConfig?.protocolConfig
   };

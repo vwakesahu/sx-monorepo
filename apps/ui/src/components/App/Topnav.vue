@@ -14,7 +14,6 @@ const { modalAccountOpen, modalAccountWithoutDismissOpen, resetAccountModal } =
 const { logout, web3 } = useWeb3();
 const { toggleTheme, currentTheme } = useTheme();
 const { isWhiteLabel } = useWhiteLabel();
-const { isAuctionApp } = useApp();
 
 const SEARCH_CONFIG = {
   space: {
@@ -65,8 +64,9 @@ function handleSearchSubmit(event: Event) {
 
   if (!searchConfig.value) return;
 
-  if (!searchValue.value)
+  if (!searchValue.value) {
     return router.push({ name: searchConfig.value.defaultRoute });
+  }
 
   router.push({
     name: searchConfig.value.searchRoute,
@@ -153,10 +153,6 @@ onUnmounted(() => {
       </label>
     </form>
 
-    <div v-if="isAuctionApp" class="flex-grow">
-      <IC-snapshot class="size-[28px] text-skin-link" />
-    </div>
-
     <div class="flex space-x-2 shrink-0">
       <UiButton v-if="web3.authLoading" loading />
       <UiDropdown v-else-if="web3.account" :key="route.fullPath">
@@ -176,16 +172,12 @@ onUnmounted(() => {
         </template>
         <template v-if="web3.account" #items>
           <UiDropdownItem
-            v-if="!isAuctionApp"
             :to="{ name: 'user', params: { user: web3.account } }"
           >
             <IH-user />
             My profile
           </UiDropdownItem>
-          <UiDropdownItem
-            v-if="!isAuctionApp"
-            :to="{ name: 'settings-spaces' }"
-          >
+          <UiDropdownItem :to="{ name: 'settings-spaces' }">
             <IH-cog />
             Settings
           </UiDropdownItem>

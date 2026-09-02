@@ -29,15 +29,9 @@ const config: CodegenConfig = {
       documents: ['src/networks/common/graphqlApi/queries.ts'],
       ...baseConfig
     },
-    './src/helpers/auction/gql/': {
-      schema:
-        'https://subgrapher.snapshot.org/subgraph/arbitrum/6EcQPEFwfCiAq45qUKk4Wnajp5vCUFuxq4r5xSBiya1d',
-      documents: ['src/helpers/auction/queries.ts'],
-      ...baseConfig
-    },
-    './src/helpers/auction/referral/gql/': {
-      schema: 'https://api.brokester.box',
-      documents: ['src/helpers/auction/referral/queries.ts'],
+    './src/networks/offchain/api/gql/': {
+      schema: '../hub/src/graphql/schema.gql',
+      documents: ['src/networks/offchain/api/queries.ts'],
       ...baseConfig
     },
     './src/helpers/townhall/gql/': {

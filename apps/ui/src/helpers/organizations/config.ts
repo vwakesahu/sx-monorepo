@@ -1,5 +1,6 @@
+import { RouteLocationRaw } from 'vue-router';
 import { NavItem } from '@/composables/useNav/types';
-import { NetworkID, Space, SpaceMetadataTreasury } from '@/types';
+import { NetworkID, RelatedSpace, Space, SpaceMetadataTreasury } from '@/types';
 import IHAnnotation from '~icons/heroicons-outline/annotation';
 import IHCheckCircle from '~icons/heroicons-outline/check-circle';
 import IHDocumentText from '~icons/heroicons-outline/document-text';
@@ -238,6 +239,56 @@ const ORGANIZATIONS: Record<string, OrganizationConfig> = {
         link: { name: 'space-discussions', params: { space: 's:ens.eth' } }
       }
     }
+  },
+  shutterpen: {
+    id: 'shutterpen',
+    name: 'Shutter PEN',
+    spaceIds: [
+      {
+        network: 'eth',
+        id: '0xC85cf8400ABB7056088279c122912E7e19634885'
+      },
+      {
+        network: 's',
+        id: 'shutterpen.eth'
+      }
+    ],
+    routes: [
+      {
+        path: 'onchain',
+        meta: { orgSpaceId: 'eth:0xC85cf8400ABB7056088279c122912E7e19634885' },
+        children: DEFAULT_SPACE_ROUTES
+      },
+      {
+        path: 'offchain',
+        meta: { orgSpaceId: 's:shutterpen.eth' },
+        children: DEFAULT_SPACE_ROUTES
+      }
+    ],
+    navItems: {
+      proposals: {
+        name: 'Onchain',
+        link: {
+          name: 'space-proposals',
+          params: { space: 'eth:0xC85cf8400ABB7056088279c122912E7e19634885' }
+        },
+        activeRoute: {
+          prefix: 'space-onchain'
+        }
+      },
+      offchain: {
+        name: 'Offchain',
+        icon: IHNewspaper,
+        link: {
+          name: 'space-proposals',
+          params: { space: 's:shutterpen.eth' }
+        },
+        activeRoute: {
+          prefix: 'space-offchain'
+        },
+        position: 2
+      }
+    }
   }
 };
 
@@ -270,6 +321,14 @@ export function getOrganizationConfigById(
   return ORGANIZATIONS[id] ?? null;
 }
 
+export function getOrganizationConfigBySpace(
+  spaceId: string
+): OrganizationConfig | null {
+  return (
+    Object.values(ORGANIZATIONS).find(org => isOrgSpace(org, spaceId)) ?? null
+  );
+}
+
 export function isOrgSpace(
   org: OrganizationConfig,
   spaceParam?: string | string[]
@@ -277,6 +336,44 @@ export function isOrgSpace(
   if (!spaceParam || Array.isArray(spaceParam)) return false;
 
   return org.spaceIds.some(s => `${s.network}:${s.id}` === spaceParam);
+}
+
+/**
+ * Resolves the link target, display title, and avatar source for a space.
+ * When the space belongs to an organization, all three point at the org.
+ * Pass `org` explicitly (including `null`) to skip the auto-detection.
+ */
+export function resolveSpaceItem(
+  space: Space | RelatedSpace,
+  org: OrganizationConfig | null = getOrganizationConfigBySpace(
+    `${space.network}:${space.id}`
+  )
+): {
+  link: RouteLocationRaw;
+  title: string;
+  avatarSpace: {
+    network: NetworkID;
+    id: string;
+    avatar: string;
+    active_proposals: number | null;
+  };
+} {
+  if (org) {
+    return {
+      link: { name: 'org', params: { org: org.id } },
+      title: org.name,
+      avatarSpace: { ...org.spaceIds[0], avatar: '', active_proposals: 0 }
+    };
+  }
+
+  return {
+    link: {
+      name: 'space-overview',
+      params: { space: `${space.network}:${space.id}` }
+    },
+    title: space.name,
+    avatarSpace: space
+  };
 }
 
 /**

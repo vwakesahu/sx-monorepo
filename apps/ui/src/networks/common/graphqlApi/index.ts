@@ -22,7 +22,6 @@ import {
   SpacesFilter
 } from '@/networks/types';
 import {
-  Follow,
   NetworkID,
   Proposal,
   ProposalExecution,
@@ -77,7 +76,7 @@ type ApiOptions = {
 const DELEGATES_SUBGRAPH_URL =
   'https://subgrapher.snapshot.org/subgraph/arbitrum/7iEHSsBprpnwCHKULfaQaCA6gU6RcEgnXfD3XtHx4yyc';
 const DELEGATES_ARB_SUBGRAPH_URL =
-  'https://subgrapher.snapshot.org/subgraph/arbitrum/BFeDAWHi9sNCMK8Rtmu4hxQ4PF8DhdPwN4enQsHUDmN2';
+  'https://subgrapher.snapshot.org/subgraph/arbitrum/9ASQUr42RMqc4zyH2po6yQ7CXbajFbk6zq5Qdj3ZgTBp';
 
 const GOVERNOR_DELEGATIONS: Record<string, string> = {
   '0x408ED6354d4973f66138C91495F2f2FCbd8724C3': DELEGATES_SUBGRAPH_URL,
@@ -131,6 +130,29 @@ function getProposalState(
   if (proposal.executed) {
     if (proposal.vetoed) return 'vetoed';
     return proposal.execution_settled ? 'executed' : 'queued';
+  }
+
+  // Revealed confidential proposal: 'passed' or 'rejected'.
+  if (
+    proposal.quorum_reached !== null &&
+    proposal.quorum_reached !== undefined &&
+    proposal.support_achieved !== null &&
+    proposal.support_achieved !== undefined
+  ) {
+    return proposal.quorum_reached && proposal.support_achieved
+      ? 'passed'
+      : 'rejected';
+  }
+
+  // Pre-reveal: scores encrypted, so show 'closed' not 'rejected'.
+  if (proposal.space?.protocol === 'snapshot-x-inco') {
+    if (Number(proposal.start_block_number ?? proposal.start) > current) {
+      return 'pending';
+    }
+    if (Number(proposal.max_end_block_number ?? proposal.max_end) <= current) {
+      return 'closed';
+    }
+    return 'active';
   }
 
   if (Number(proposal.max_end_block_number ?? proposal.max_end) <= current) {
@@ -315,10 +337,15 @@ function formatSpace(
   space: ApiSpaceWithMetadata,
   constants: NetworkConstants
 ): Space {
+  const isConfidential = space.protocol === 'snapshot-x-inco';
+
   return {
     ...space,
     voting_delay: Number(space.voting_delay),
-    min_voting_period: Number(space.min_voting_period),
+    // Inco reveal and execution are gated on max end, min end is unused.
+    min_voting_period: Number(
+      isConfidential ? space.max_voting_period : space.min_voting_period
+    ),
     max_voting_period: Number(space.max_voting_period),
     turbo_expiration: 0,
     network: space._indexer as NetworkID,
@@ -335,7 +362,7 @@ function formatSpace(
     terms: '',
     privacy: 'none',
     voting_power_symbol: space.metadata.voting_power_symbol,
-    active_proposals: null,
+    active_proposals: space.active_proposal_count,
     voting_types: constants.EDITOR_VOTING_TYPES,
     treasuries: space.metadata.treasuries.map(treasury =>
       formatMetadataTreasury(treasury)
@@ -378,6 +405,7 @@ function formatProposal(
   const state = getProposalState(networkId, proposal, current);
 
   const isStarknetNetwork = starknetNetworks.includes(networkId);
+  const isConfidential = proposal.space.protocol === 'snapshot-x-inco';
 
   const emptyAddress = isStarknetNetwork
     ? STARKNET_EMPTY_ADDRESS
@@ -386,8 +414,17 @@ function formatProposal(
   return {
     ...proposal,
     start: Number(proposal.start),
-    min_end: Number(proposal.min_end),
+    start_block_number: Number(proposal.start_block_number) || null,
+    // Inco reveal and execution are gated on max end, min end is unused.
+    min_end: Number(isConfidential ? proposal.max_end : proposal.min_end),
+    min_end_block_number:
+      Number(
+        isConfidential
+          ? proposal.max_end_block_number
+          : proposal.min_end_block_number
+      ) || null,
     max_end: Number(proposal.max_end),
+    max_end_block_number: Number(proposal.max_end_block_number) || null,
     snapshot: Number(proposal.snapshot),
     execution_time: Number(proposal.execution_time),
     executed_at: proposal.executed_at ? Number(proposal.executed_at) : null,
@@ -427,16 +464,25 @@ function formatProposal(
     discussion: proposal.metadata?.discussion ?? '',
     execution_network: executionNetworkId,
     executions: processExecutions(proposal, executionNetworkId),
-    has_execution_window_opened: ['Axiom', 'EthRelayer'].includes(
-      proposal.execution_strategy_type
-    )
-      ? Number(proposal.max_end_block_number ?? proposal.max_end) <= current
-      : Number(proposal.min_end_block_number ?? proposal.min_end) <= current,
+    has_execution_window_opened:
+      ['EthRelayer'].includes(proposal.execution_strategy_type) ||
+      isConfidential
+        ? Number(proposal.max_end_block_number ?? proposal.max_end) <= current
+        : Number(proposal.min_end_block_number ?? proposal.min_end) <= current,
     execution_settled: proposal.execution_settled,
+    quorum_reached: proposal.quorum_reached ?? null,
+    support_achieved: proposal.support_achieved ?? null,
     state,
     network: networkId,
-    privacy: 'none',
-    quorum: Number(proposal.execution_strategy_details?.quorum || 0),
+    privacy: proposal.space.protocol === 'snapshot-x-inco' ? 'inco' : 'none',
+    // OZ Governor quorum becomes static at proposal time.
+    // Compound Governor quorum is only set on deployment.
+    // SX quorum is dynamic and quorum changes affect past proposals.
+    quorum: ['@openzeppelin/governor', 'governor-bravo'].includes(
+      proposal.space.protocol
+    )
+      ? Number(proposal.quorum || 0)
+      : Number(proposal.execution_strategy_details?.quorum || 0),
     quorum_type: proposal.quorum_type as Proposal['quorum_type'],
     flagged: false,
     flag_code: 0,
@@ -618,29 +664,29 @@ export function createApi(
       filters?: ProposalsFilter,
       searchQuery = ''
     ): Promise<Proposal[]> => {
-      const _filters: ProposalsFilter = clone(filters || {});
+      const {
+        state: stateFilter,
+        labels,
+        ...restFilters
+      }: ProposalsFilter = filters || {};
 
       const metadataFilters: Record<string, any> = {};
       if (searchQuery) metadataFilters.title_contains_nocase = searchQuery;
 
-      const state = _filters.state;
+      const state = stateFilter;
 
       if (state === 'active') {
-        _filters.start_lte = current;
-        _filters.max_end_gte = current;
+        restFilters.start_lte = current;
+        restFilters.max_end_gte = current;
       } else if (state === 'pending') {
-        _filters.start_gt = current;
+        restFilters.start_gt = current;
       } else if (state === 'closed') {
-        _filters.max_end_lt = current;
+        restFilters.max_end_lt = current;
       }
 
-      delete _filters.state;
-
-      if (_filters.labels?.length) {
-        metadataFilters.labels_contains = _filters.labels;
+      if (labels?.length) {
+        metadataFilters.labels_contains = labels;
       }
-
-      delete _filters.labels;
 
       const { data } = await apollo.query({
         query: PROPOSALS_QUERY,
@@ -653,7 +699,7 @@ export function createApi(
             metadata_: Object.keys(metadataFilters).length
               ? metadataFilters
               : undefined,
-            ..._filters
+            ...restFilters
           }
         }
       });
@@ -866,10 +912,13 @@ export function createApi(
       }));
     },
     loadFollows: async () => {
-      return [] as Follow[];
+      return [];
     },
     loadAlias: async () => {
       return null;
+    },
+    loadAliases: async () => {
+      return [];
     },
     loadStatement: async () => {
       return null;

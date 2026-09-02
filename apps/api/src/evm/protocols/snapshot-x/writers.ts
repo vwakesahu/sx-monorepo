@@ -7,7 +7,6 @@ import {
   keccak256,
   parseAbiParameters
 } from 'viem';
-import AxiomExecutionStrategyAbi from './abis/AxiomExecutionStrategy';
 import L1AvatarExecutionStrategyAbi from './abis/L1AvatarExecutionStrategy';
 import L1AvatarExecutionStrategyFactoryAbi from './abis/L1AvatarExecutionStrategyFactory';
 import ProxyFactoryAbi from './abis/ProxyFactory';
@@ -28,6 +27,7 @@ import {
   Leaderboard,
   Proposal,
   Space,
+  SpaceImplementation,
   SpaceMetadataItem,
   StarknetL1Execution,
   User,
@@ -61,9 +61,7 @@ import {
  */
 const KNOWN_EXECUTION_STRATEGIES = [
   'SimpleQuorumAvatar',
-  'SimpleQuorumTimelock',
-  'Axiom',
-  'Isokratia'
+  'SimpleQuorumTimelock'
 ];
 
 const EMPTY_EXECUTION_HASH =
@@ -77,6 +75,16 @@ export function createWriters(
     transport: http(config.network_node_url)
   });
 
+  const incoMasterSpace = protocolConfig.incoMasterSpace
+    ? getAddress(protocolConfig.incoMasterSpace)
+    : null;
+  const masterSimpleQuorumTimelock = protocolConfig.masterSimpleQuorumTimelock
+    ? getAddress(protocolConfig.masterSimpleQuorumTimelock)
+    : null;
+  const masterSimpleQuorumAvatar = protocolConfig.masterSimpleQuorumAvatar
+    ? getAddress(protocolConfig.masterSimpleQuorumAvatar)
+    : null;
+
   const handleProxyDeployed: evm.Writer<
     typeof ProxyFactoryAbi,
     'ProxyDeployed'
@@ -89,14 +97,23 @@ export function createWriters(
     const implementationAddress = getAddress(event.args.implementation);
 
     switch (implementationAddress) {
-      case getAddress(protocolConfig.masterSpace): {
+      case getAddress(protocolConfig.masterSpace):
+      case incoMasterSpace: {
+        const spaceImplementation = new SpaceImplementation(
+          proxyAddress,
+          config.indexerName
+        );
+
+        spaceImplementation.implementation = implementationAddress;
+        await spaceImplementation.save();
+
         await executeTemplate('Space', {
           contract: proxyAddress,
           start: blockNumber
         });
         break;
       }
-      case getAddress(protocolConfig.masterSimpleQuorumTimelock): {
+      case masterSimpleQuorumTimelock: {
         const [type, quorum, timelockVetoGuardian, timelockDelay] =
           await client.multicall({
             contracts: [
@@ -148,7 +165,7 @@ export function createWriters(
 
         break;
       }
-      case getAddress(protocolConfig.masterSimpleQuorumAvatar): {
+      case masterSimpleQuorumAvatar: {
         const [type, quorum, target] = await client.multicall({
           contracts: [
             {
@@ -192,36 +209,6 @@ export function createWriters(
 
         break;
       }
-      case protocolConfig.masterAxiom
-        ? getAddress(protocolConfig.masterAxiom)
-        : Symbol('never'): {
-        const quorum = await client.readContract({
-          address: proxyAddress,
-          abi: AxiomExecutionStrategyAbi,
-          functionName: 'quorum',
-          blockNumber: BigInt(blockNumber)
-        });
-
-        const executionStrategy = new ExecutionStrategy(
-          proxyAddress,
-          config.indexerName
-        );
-        executionStrategy.address = proxyAddress;
-        executionStrategy.type = 'Axiom'; // override because contract returns AxiomExecutionStrategyMock
-        executionStrategy.quorum = quorum.toString();
-        executionStrategy.treasury_chain = protocolConfig.chainId;
-        executionStrategy.treasury = proxyAddress;
-        executionStrategy.timelock_delay = 0n;
-
-        await executionStrategy.save();
-
-        await executeTemplate('AxiomExecutionStrategy', {
-          contract: proxyAddress,
-          start: blockNumber
-        });
-
-        break;
-      }
       default:
         logger.warn(
           { address: implementationAddress },
@@ -241,8 +228,22 @@ export function createWriters(
     const id = getAddress(event.args.space);
     const { votingStrategies } = event.args.input;
 
+    const spaceImplementation = await SpaceImplementation.loadEntity(
+      id,
+      config.indexerName
+    );
+
+    if (!spaceImplementation) {
+      logger.warn('Space implementation not found, skipping space creation');
+      return;
+    }
+
     const space = new Space(id, config.indexerName);
-    space.protocol = 'snapshot-x';
+    space.protocol =
+      getAddress(spaceImplementation.implementation) === incoMasterSpace
+        ? 'snapshot-x-inco'
+        : 'snapshot-x';
+
     space.link = getSpaceLink({
       networkId: config.indexerName,
       spaceId: id
@@ -712,9 +713,6 @@ export function createWriters(
       proposal.timelock_veto_guardian =
         executionStrategy.timelock_veto_guardian;
       proposal.timelock_delay = executionStrategy.timelock_delay;
-      proposal.axiom_snapshot_address =
-        executionStrategy.axiom_snapshot_address;
-      proposal.axiom_snapshot_slot = executionStrategy.axiom_snapshot_slot;
       proposal.execution_strategy_type = executionStrategy.type;
 
       // Find matching strategy and persist it on space object
@@ -727,8 +725,6 @@ export function createWriters(
       proposal.timelock_delay = 0n;
       proposal.execution_strategy_type = 'none';
     }
-
-    proposal.execution_ready = proposal.execution_strategy_type != 'Axiom';
 
     if (proposal.execution_hash !== EMPTY_EXECUTION_HASH) {
       let executionHash = await ExecutionHash.loadEntity(
@@ -898,9 +894,6 @@ export function createWriters(
       proposal.timelock_veto_guardian =
         executionStrategy.timelock_veto_guardian;
       proposal.timelock_delay = executionStrategy.timelock_delay;
-      proposal.axiom_snapshot_address =
-        executionStrategy.axiom_snapshot_address;
-      proposal.axiom_snapshot_slot = executionStrategy.axiom_snapshot_slot;
       proposal.execution_strategy_type = executionStrategy.type;
 
       // Find matching strategy and persist it on space object
@@ -913,8 +906,6 @@ export function createWriters(
       proposal.timelock_delay = 0n;
       proposal.execution_strategy_type = 'none';
     }
-
-    proposal.execution_ready = proposal.execution_strategy_type != 'Axiom';
 
     if (proposal.execution_hash !== EMPTY_EXECUTION_HASH) {
       let executionHash = await ExecutionHash.loadEntity(
@@ -977,7 +968,6 @@ export function createWriters(
     if (executionStrategy) {
       switch (executionStrategy.type) {
         case 'SimpleQuorumAvatar':
-        case 'Axiom':
           proposal.execution_settled = true;
           proposal.completed = true;
           proposal.execution_tx = txId;
@@ -991,6 +981,87 @@ export function createWriters(
       }
     }
 
+    const space = await Space.loadEntity(spaceId, config.indexerName);
+
+    if (space?.protocol === 'snapshot-x-inco') {
+      proposal.execution_settled = true;
+      proposal.completed = true;
+      proposal.execution_tx = txId;
+      proposal.executed_at = BigInt(now);
+      proposal.executed_at_block_number = BigInt(blockNumber);
+    }
+
+    await proposal.save();
+  };
+
+  // Public per-choice tally + verdict on reveal.
+  const handleProposalResultRevealed: evm.Writer<
+    typeof SpaceAbi,
+    'ProposalResultRevealed'
+  > = async ({ blockNumber, rawEvent, event }) => {
+    if (!rawEvent || !event) return;
+
+    const spaceId = getAddress(rawEvent.address);
+    const proposalId = `${spaceId}/${event.args.proposalId}`;
+    const proposal = await Proposal.loadEntity(proposalId, config.indexerName);
+    if (!proposal) return;
+
+    // contract 0/1/2 = Against/For/Abstain -> scores_2/1/3
+    const againstVotes = BigInt(event.args.againstVotes);
+    const forVotes = BigInt(event.args.forVotes);
+    const abstainVotes = BigInt(event.args.abstainVotes);
+    const totalVotes = againstVotes + forVotes + abstainVotes;
+
+    proposal.scores_1 = forVotes.toString();
+    proposal.scores_1_parsed = getParsedVP(
+      proposal.scores_1,
+      proposal.vp_decimals
+    );
+    proposal.scores_2 = againstVotes.toString();
+    proposal.scores_2_parsed = getParsedVP(
+      proposal.scores_2,
+      proposal.vp_decimals
+    );
+    proposal.scores_3 = abstainVotes.toString();
+    proposal.scores_3_parsed = getParsedVP(
+      proposal.scores_3,
+      proposal.vp_decimals
+    );
+    proposal.scores_total = totalVotes.toString();
+    proposal.scores_total_parsed = getParsedVP(
+      proposal.scores_total,
+      proposal.vp_decimals
+    );
+
+    // The event's `passed` flag is strategy-specific and the indexed quorum
+    // can diverge from what the contract used (setQuorum after propose,
+    // missing metadata), so read the verdicts the contract froze at reveal.
+    const [quorumReached, supportAchieved] = await client.multicall({
+      contracts: [
+        {
+          address: rawEvent.address as `0x${string}`,
+          abi: SpaceAbi,
+          functionName: 'isQuorumReached',
+          args: [event.args.proposalId]
+        },
+        {
+          address: rawEvent.address as `0x${string}`,
+          abi: SpaceAbi,
+          functionName: 'isSupportAchieved',
+          args: [event.args.proposalId]
+        }
+      ],
+      multicallAddress: MULTICALL3_ADDRESS,
+      allowFailure: false,
+      blockNumber: BigInt(blockNumber)
+    });
+
+    proposal.quorum_reached = quorumReached;
+    proposal.support_achieved = supportAchieved;
+
+    // Completed at reveal, independent of execute step.
+    proposal.completed = true;
+
     await proposal.save();
   };
 
@@ -999,6 +1070,9 @@ export function createWriters(
     'VoteCast' | 'VoteCastWithMetadata'
   > = async ({ block, txId, rawEvent, event }) => {
     if (!rawEvent || !event) return;
+    // Confidential variant of `VoteCast` overloads the same event name with
+    // no `choice` arg. Skip — it's handled by `handleConfidentialVoteCast`.
+    if (!('choice' in event.args)) return;
 
     logger.info('Handle vote cast');
 
@@ -1107,6 +1181,110 @@ export function createWriters(
     await proposal.save();
   };
 
+  // Confidential-voting variant. Inco Spaces emit `VoteCast(uint256,address,uint256)`
+  // (no plaintext `choice`), so per-choice score tallies are unknowable until the
+  // proposal is `tryExecute`d (and even then, only the pass/fail flags decrypt).
+  // We only touch the totals-side state; `vote.choice = 0` is a sentinel meaning
+  // "encrypted
+  const handleConfidentialVoteCast: evm.Writer<
+    typeof SpaceAbi,
+    'VoteCast' | 'VoteCastWithMetadata'
+  > = async ({ block, txId, rawEvent, event }) => {
+    if (!rawEvent || !event) return;
+    // Legacy `VoteCast` (with `choice`) is dispatched here too because the
+    // names overload. Skip — handled by `handleVoteCast` above.
+    if ('choice' in event.args) return;
+
+    logger.info('Handle confidential vote cast');
+
+    const spaceId = getAddress(rawEvent.address);
+    const proposalId = event.args.proposalId;
+    const vp = event.args.votingPower;
+
+    const proposal = await Proposal.loadEntity(
+      `${spaceId}/${proposalId}`,
+      config.indexerName
+    );
+    if (!proposal) return;
+
+    const created = Number(block?.timestamp ?? getCurrentTimestamp());
+    const voter = getAddress(event.args.voter);
+
+    const vote = new Vote(
+      `${spaceId}/${proposalId}/${voter}`,
+      config.indexerName
+    );
+    vote.space = spaceId;
+    vote.proposal = proposalId.toString();
+    vote.voter = voter;
+    vote.choice = 0;
+    vote.vp = vp.toString();
+    vote.vp_parsed = getParsedVP(vp.toString(), proposal.vp_decimals);
+    vote.created = created;
+    vote.tx = txId;
+
+    if ('metadataUri' in event.args) {
+      try {
+        const metadataUri = event.args.metadataUri;
+        await handleVoteMetadata(metadataUri, config);
+        vote.metadata = dropIpfs(metadataUri);
+      } catch (err) {
+        logger.info({ err }, 'Failed to handle confidential vote metadata');
+      }
+    }
+
+    await vote.save();
+
+    const existingUser = await User.loadEntity(voter, config.indexerName);
+    if (existingUser) {
+      existingUser.vote_count += 1;
+      await existingUser.save();
+    } else {
+      const user = new User(voter, config.indexerName);
+      user.address_type = 1;
+      user.created = created;
+      await user.save();
+    }
+
+    let leaderboardItem = await Leaderboard.loadEntity(
+      `${spaceId}/${voter}`,
+      config.indexerName
+    );
+    if (!leaderboardItem) {
+      leaderboardItem = new Leaderboard(
+        `${spaceId}/${voter}`,
+        config.indexerName
+      );
+      leaderboardItem.space = spaceId;
+      leaderboardItem.user = voter;
+      leaderboardItem.vote_count = 0;
+      leaderboardItem.proposal_count = 0;
+    }
+    leaderboardItem.vote_count += 1;
+    await leaderboardItem.save();
+
+    await updateCounter(config.indexerName, 'vote_count', 1);
+
+    const space = await Space.loadEntity(spaceId, config.indexerName);
+    if (space) {
+      space.vote_count += 1;
+      if (leaderboardItem.vote_count === 1) space.voter_count += 1;
+      await space.save();
+    }
+
+    proposal.vote_count += 1;
+    proposal.scores_total = (
+      BigInt(proposal.scores_total) + BigInt(vote.vp)
+    ).toString();
+    proposal.scores_total_parsed = getParsedVP(
+      proposal.scores_total,
+      proposal.vp_decimals
+    );
+    // Per-choice score buckets are intentionally NOT updated — they remain encrypted.
+
+    await proposal.save();
+  };
+
   const handleTimelockProposalExecuted: evm.Writer<
     typeof SimpleQuorumTimelockExecutionStrategyAbi,
     'ProposalExecuted'
@@ -1183,34 +1361,6 @@ export function createWriters(
     }
   };
 
-  const handleAxiomWriteOffchainVotes: evm.Writer<
-    typeof AxiomExecutionStrategyAbi,
-    'WriteOffchainVotes'
-  > = async ({ rawEvent, blockNumber, event }) => {
-    if (!rawEvent || !event) return;
-
-    logger.info('Handle axiom write offchain votes');
-
-    const space = await client.readContract({
-      address: rawEvent.address,
-      abi: AxiomExecutionStrategyAbi,
-      functionName: 'space',
-      blockNumber: BigInt(blockNumber)
-    });
-
-    const spaceId = getAddress(space);
-
-    const proposal = await Proposal.loadEntity(
-      `${spaceId}/${event.args.proposalId}`,
-      config.indexerName
-    );
-    if (!proposal) return;
-
-    proposal.execution_ready = true;
-
-    proposal.save();
-  };
-
   const handleL1AvatarExecutionContractDeployed: evm.Writer<
     typeof L1AvatarExecutionStrategyFactoryAbi,
     'ContractDeployed'
@@ -1269,13 +1419,13 @@ export function createWriters(
     handleProposalCancelled,
     handleProposalUpdated,
     handleProposalExecuted,
+    handleProposalResultRevealed,
     handleVoteCast,
+    handleConfidentialVoteCast,
     // SimpleQuorumTimelockExecutionStrategy
     handleTimelockProposalExecuted,
     handleTimelockProposalVetoed,
     handleQuorumUpdated,
-    // Axiom
-    handleAxiomWriteOffchainVotes,
     // L1AvatarExecutionStrategyFactory
     handleL1AvatarExecutionContractDeployed,
     // L1AvatarExecutionStrategy

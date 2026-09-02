@@ -19,6 +19,7 @@ const ethereumNetwork = createEvmNetwork('eth');
 const apeNetwork = createEvmNetwork('ape');
 const curtisNetwork = createEvmNetwork('curtis');
 const sepoliaNetwork = createEvmNetwork('sep');
+const baseSepoliaNetwork = createEvmNetwork('basesep');
 
 export const enabledNetworks: NetworkID[] = import.meta.env
   .VITE_ENABLED_NETWORKS
@@ -37,6 +38,7 @@ export const enabledNetworks: NetworkID[] = import.meta.env
       'ape',
       'curtis',
       'sep',
+      'basesep',
       'sn',
       'sn-sep'
     ];
@@ -52,7 +54,8 @@ export const evmNetworks: NetworkID[] = [
   'bnbt',
   'ape',
   'curtis',
-  'sep'
+  'sep',
+  'basesep'
 ];
 export const offchainNetworks: NetworkID[] = ['s', 's-tn'];
 export const starknetNetworks: NetworkID[] = ['sn', 'sn-sep'];
@@ -63,13 +66,17 @@ export const governorNetworks: NetworkID[] = [
   'bnbt',
   'sep'
 ];
+// SX core contracts (proxyFactory/masterSpace) are not deployed on these
+// networks, so they support Governor spaces only (no SX space creation/explore).
+export const governorOnlyNetworks: NetworkID[] = ['bnb', 'bnbt'];
 // This network is used for aliases/follows/profiles/explore page.
 export const metadataNetwork: NetworkID =
   import.meta.env.VITE_METADATA_NETWORK || 's';
 
 export const getNetwork = (id: NetworkID) => {
-  if (!enabledNetworks.includes(id))
+  if (!enabledNetworks.includes(id)) {
     throw new Error(`Network ${id} is not enabled`);
+  }
 
   if (id === 's') return snapshotNetwork;
   if (id === 's-tn') return snapshotTestnetNetwork;
@@ -84,6 +91,7 @@ export const getNetwork = (id: NetworkID) => {
   if (id === 'ape') return apeNetwork;
   if (id === 'curtis') return curtisNetwork;
   if (id === 'sep') return sepoliaNetwork;
+  if (id === 'basesep') return baseSepoliaNetwork;
   if (id === 'sn') return starknetNetwork;
   if (id === 'sn-sep') return starknetSepoliaNetwork;
 
@@ -100,6 +108,9 @@ export const getReadWriteNetwork = (id: NetworkID): ReadWriteNetwork => {
 export const enabledReadWriteNetworks: NetworkID[] = enabledNetworks.filter(
   id => !getNetwork(id).readOnly
 );
+
+export const spaceCreationNetworks: NetworkID[] =
+  enabledReadWriteNetworks.filter(id => !governorOnlyNetworks.includes(id));
 
 const onchainApiNetwork =
   enabledNetworks.find(network => !offchainNetworks.includes(network)) || 'eth';
@@ -118,9 +129,19 @@ export const explorePageProtocols: Record<ExplorePageProtocol, ProtocolConfig> =
       label: 'Snapshot X',
       apiNetwork: onchainApiNetwork,
       networks: enabledNetworks.filter(
-        network => !offchainNetworks.includes(network)
+        network =>
+          !offchainNetworks.includes(network) &&
+          !governorOnlyNetworks.includes(network)
       ),
       limit: 18
+    },
+    'snapshot-x-inco': {
+      key: 'snapshot-x-inco',
+      label: 'Snapshot X × Inco',
+      apiNetwork: 'basesep',
+      networks: ['basesep'],
+      limit: 18,
+      disabled: !enabledNetworks.includes('basesep')
     },
     governor: {
       key: 'governor',

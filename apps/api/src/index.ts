@@ -29,10 +29,6 @@ function getDatabaseConnection() {
     return process.env.DATABASE_URL;
   }
 
-  if (process.env.DATABASE_URL_INDEX) {
-    return process.env[`DATABASE_URL_${process.env.DATABASE_URL_INDEX}`];
-  }
-
   throw new Error('No valid database connection URL found.');
 }
 
@@ -46,7 +42,46 @@ async function run() {
     resetOnConfigChange: true,
     pinoOptions,
     overridesConfig: overrides,
-    dbConnection: getDatabaseConnection()
+    dbConnection: getDatabaseConnection(),
+    resolvers: {
+      Space: {
+        active_proposal_count: {
+          sql: knex =>
+            knex('proposals')
+              .count('*')
+              .where('proposals.space', knex.ref('spaces.id'))
+              .where('proposals._indexer', knex.ref('spaces._indexer'))
+              .where(
+                'proposals.start',
+                '<=',
+                knex.raw('extract(epoch from now())::integer')
+              )
+              .where(
+                'proposals.max_end',
+                '>',
+                knex.raw('extract(epoch from now())::integer')
+              )
+              .where('proposals.cancelled', false)
+              .where('proposals.executed', false)
+              .where('proposals.vetoed', false)
+              .whereRaw('upper_inf(proposals.block_range)')
+        }
+      },
+      Proposal: {
+        state: {
+          sql: knex =>
+            knex.select(
+              knex.raw(
+                `case
+                  when proposals.start > extract(epoch from now())::integer then 'pending'
+                  when proposals.max_end > extract(epoch from now())::integer then 'active'
+                  else 'closed'
+                end`
+              )
+            )
+        }
+      }
+    }
   });
 
   await startApiServer(checkpoint);

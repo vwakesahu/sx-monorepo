@@ -6,14 +6,71 @@ import {
   _vp,
   abiToDefinition,
   createErc1155Metadata,
+  escapeHtml,
   formatAddress,
   getSpaceController,
   getStampUrl,
   getUserFacingErrorMessage,
+  replaceNamePlaceholder,
   uniqBy
 } from './utils';
 
 describe('utils', () => {
+  describe('escapeHtml', () => {
+    it('should neutralize an img onerror XSS payload', () => {
+      expect(escapeHtml('<img src=x onerror=alert(1)>')).toBe(
+        '&lt;img src=x onerror=alert(1)&gt;'
+      );
+    });
+
+    it('should escape all HTML-sensitive characters', () => {
+      expect(escapeHtml(`<>&"'`)).toBe('&lt;&gt;&amp;&quot;&#39;');
+    });
+
+    it('should leave plain text untouched', () => {
+      expect(escapeHtml('USDC')).toBe('USDC');
+    });
+
+    it('should handle nullish input', () => {
+      expect(escapeHtml(undefined)).toBe('');
+      expect(escapeHtml(null)).toBe('');
+    });
+  });
+
+  describe('replaceNamePlaceholder', () => {
+    const title = 'Raw transaction to <b>_NAME_</b>';
+
+    it('should insert an escaped plain name', () => {
+      expect(replaceNamePlaceholder(title, 'usdcoin.eth')).toBe(
+        'Raw transaction to <b>usdcoin.eth</b>'
+      );
+    });
+
+    it('should not splice the marker when the name contains $&', () => {
+      expect(replaceNamePlaceholder(title, 'a$&b.eth')).toBe(
+        'Raw transaction to <b>a$&amp;b.eth</b>'
+      );
+    });
+
+    it('should not drop characters when the name contains $$', () => {
+      expect(replaceNamePlaceholder(title, 'usd$$coin.eth')).toBe(
+        'Raw transaction to <b>usd$$coin.eth</b>'
+      );
+    });
+
+    it("should not misinterpret $` and $' replacement patterns", () => {
+      expect(replaceNamePlaceholder(title, "a$`b$'c.eth")).toBe(
+        'Raw transaction to <b>a$`b$&#39;c.eth</b>'
+      );
+    });
+
+    it('should still escape HTML in the name', () => {
+      expect(
+        replaceNamePlaceholder(title, '<img src=x onerror=alert(1)>')
+      ).toBe('Raw transaction to <b>&lt;img src=x onerror=alert(1)&gt;</b>');
+    });
+  });
+
   describe('uniqBy', () => {
     it('should return unique values by key', () => {
       const arr = [
@@ -222,6 +279,12 @@ describe('utils', () => {
       );
     });
 
+    it('re-checksums an evm address with a malformed checksum', () => {
+      expect(formatAddress('0x0579A616689f7ed748dC07692A3f150d44b0CA09')).toBe(
+        '0x0579A616689f7ed748dC07692A3F150D44b0CA09'
+      );
+    });
+
     it('returns a padded starknet address', () => {
       expect(formatAddress('0x4c5dda09742520fdf5c2bbfa4aede8fb9fe6781')).toBe(
         '0x00000000000000000000000004c5dda09742520fdf5c2bbfa4aede8fb9fe6781'
@@ -316,28 +379,28 @@ describe('utils', () => {
       const expectedController = '0x220bc93D88C0aF11f1159eA89a885d5ADd3A7Cf6';
       const controller = await getSpaceController(spaceId, 's');
       expect(controller).toBe(expectedController);
-    });
+    }, 10000);
 
     it('should return the space controller address for an ENS name on mainnet', async () => {
       const spaceId = 'ens.eth';
       const expectedController = '0xb6E040C9ECAaE172a89bD561c5F73e1C48d28cd9';
       const controller = await getSpaceController(spaceId, 's');
       expect(controller).toBe(expectedController);
-    });
+    }, 10000);
 
     it('should return the space controller address for an ENS name on testnet', async () => {
       const spaceId = 'ens.eth';
       const expectedController = '0x179A862703a4adfb29896552DF9e307980D19285';
       const controller = await getSpaceController(spaceId, 's-tn');
       expect(controller).toBe(expectedController);
-    });
+    }, 10000);
 
     it('should return the space controller address for a sonic name on mainnet', async () => {
       const spaceId = 'boorger.sonic';
       const expectedController = '0x220bc93D88C0aF11f1159eA89a885d5ADd3A7Cf6';
       const controller = await getSpaceController(spaceId, 's');
       expect(controller).toBe(expectedController);
-    });
+    }, 10000);
 
     it('should throw an error when getting a sonic name on testnet', async () => {
       const spaceId = 'boorger.sonic';
@@ -397,6 +460,30 @@ describe('utils', () => {
         required: ['Input 1', 'Input 2'],
         title: 'allowance',
         type: 'object'
+      });
+    });
+
+    it('should use JSON input for tuples', () => {
+      const iface = new Interface([
+        'function swap((uint256 amountIn, address[] path) trade, uint256 deadline)'
+      ]);
+
+      const definition = abiToDefinition(iface.getFunction('swap'), 1);
+
+      expect(definition.properties).toEqual({
+        trade: {
+          abiType: 'tuple(uint256 amountIn, address[] path) trade',
+          examples: ['{ "key": "value" }'],
+          format: 'long',
+          title: 'trade (tuple)',
+          type: 'string'
+        },
+        deadline: {
+          examples: ['0'],
+          format: 'uint256',
+          title: 'deadline (uint256)',
+          type: 'string'
+        }
       });
     });
   });

@@ -26,7 +26,7 @@ type BalanceInfo = {
   ethBalance: bigint;
 };
 
-const MANA_URL = 'https://mana.box';
+const MANA_URL = 'https://mana.snapshot.box';
 const ETH_TOKEN_ADDRESS =
   '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
 const STARK_TOKEN_ADDRESS =
@@ -34,11 +34,11 @@ const STARK_TOKEN_ADDRESS =
 
 const CONFIG: Record<NetworkID, NetworkConfig> = {
   sn: {
-    rpcUrl: 'https://rpc.snapshot.org/sn',
+    rpcUrl: 'https://rpc.brovider.xyz/sn?client=mana',
     apiUrl: 'https://api.snapshot.box'
   },
   'sn-sep': {
-    rpcUrl: 'https://rpc.snapshot.org/sn-sep',
+    rpcUrl: 'https://rpc.brovider.xyz/sn-sep?client=mana',
     apiUrl: 'https://testnet-api.snapshot.box'
   }
 };

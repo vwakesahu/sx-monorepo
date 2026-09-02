@@ -11,22 +11,17 @@ export type NetworkID =
   | 'bnb'
   | 'bnbt'
   | 'ape'
-  | 'curtis';
-
-export type Protocols = {
-  snapshotX: boolean;
-  governorBravo: boolean;
-  openZeppelin: boolean;
-};
+  | 'curtis'
+  | 'basesep';
 
 export type SnapshotXConfig = {
   chainId: number;
   manaRpcUrl: string;
   masterSpace: string;
-  masterSimpleQuorumAvatar: string;
-  masterSimpleQuorumTimelock: string;
-  masterAxiom: string | null;
-  propositionPowerValidationStrategyAddress: string;
+  incoMasterSpace: string | null;
+  masterSimpleQuorumAvatar: string | null;
+  masterSimpleQuorumTimelock: string | null;
+  propositionPowerValidationStrategyAddress: string | null;
   apeGasStrategy: string | null;
   apeGasStrategyDelay: number;
 };
@@ -41,7 +36,7 @@ export type OpenZeppelinConfig = {
 
 export type EVMConfig = {
   indexerName: NetworkID;
-  snapshotXConfig?: SnapshotXConfig;
+  snapshotXConfig: SnapshotXConfig;
   governorBravoConfig?: GovernorBravoConfig;
   openZeppelinConfig?: OpenZeppelinConfig;
 } & CheckpointConfig;

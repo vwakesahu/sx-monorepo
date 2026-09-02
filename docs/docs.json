@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/schema.json",
   "name": "Snapshot",
-  "theme": "mint",
+  "theme": "aspen",
   "appearance": {
     "default": "dark"
   },
@@ -19,6 +19,28 @@
     "dark": "#000000"
   },
   "navigation": {
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Blog",
+          "href": "https://blog.snapshot.box",
+          "icon": "newspaper",
+          "iconType": "regular"
+        },
+        {
+          "anchor": "Contact us",
+          "href": "/contact-us",
+          "icon": "headset",
+          "iconType": "regular"
+        },
+        {
+          "anchor": "Status",
+          "href": "https://status.snapshot.org",
+          "icon": "signal",
+          "iconType": "regular"
+        }
+      ]
+    },
     "tabs": [
       {
         "tab": "Help center",
@@ -77,7 +99,9 @@
               "user-guides/using-safe-multi-sig",
               "v1-interface/plugins/safesnap-reality",
               "tools/mobile-notifications",
-              "tools/bots"
+              "tools/bots",
+              "user-guides/aliases",
+              "tools/snapshot-mcp"
             ]
           },
           {
@@ -97,7 +121,8 @@
           {
             "group": "FAQ",
             "pages": [
-              "faq"
+              "faq",
+              "contact-us"
             ]
           }
         ]
@@ -108,7 +133,7 @@
           {
             "group": "Getting started",
             "pages": [
-              "developers/index"
+              "developers"
             ]
           },
           {
@@ -183,11 +208,6 @@
       "cursor",
       "vscode"
     ]
-  },
-  "integrations": {
-    "intercom": {
-      "appId": "n9dmxtcs"
-    }
   },
   "externalLinks": [
     {

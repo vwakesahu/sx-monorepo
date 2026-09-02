@@ -1,5 +1,6 @@
 import {
   getExecutionData as _getExecutionData,
+  ProtocolID,
   Choice as SdkChoice,
   utils
 } from '@snapshot-labs/sx';
@@ -19,6 +20,21 @@ export function getSdkChoice(choice: Choice): SdkChoice {
   if (choice === 'for') return SdkChoice.For;
   if (choice === 'against') return SdkChoice.Against;
   return SdkChoice.Abstain;
+}
+
+/**
+ * Keeps strategies usable with the given protocol: untagged strategies are
+ * protocol-agnostic, tagged ones must include it. Networks hosting both
+ * snapshot-x and snapshot-x-inco tag their protocol-specific contracts.
+ */
+export function filterStrategiesByProtocol<
+  T extends { protocols?: ProtocolID[] }
+>(strategies: T[], protocol: string): T[] {
+  return strategies.filter(
+    strategy =>
+      !strategy.protocols ||
+      strategy.protocols.some(supported => supported === protocol)
+  );
 }
 
 export function getExecutionData(
@@ -75,7 +91,8 @@ export function createStrategyPicker({ helpers }: { helpers: NetworkHelpers }) {
     isContract,
     hasReason,
     connectorType,
-    ignoreRelayer
+    ignoreRelayer,
+    preferRelayerType
   }: {
     authenticators: string[];
     strategies: string[];
@@ -84,6 +101,7 @@ export function createStrategyPicker({ helpers }: { helpers: NetworkHelpers }) {
     hasReason: boolean;
     connectorType: ConnectorType;
     ignoreRelayer?: boolean;
+    preferRelayerType?: AuthenticatorSupportInfo['relayerType'];
   }) {
     type AuthenticatorWithSupportInfo = {
       authenticator: string;
@@ -111,10 +129,13 @@ export function createStrategyPicker({ helpers }: { helpers: NetworkHelpers }) {
         return supportInfo.isSupported;
       })
       .sort((a, b) => {
-        const aRelayerPriority = a.supportInfo.priority ?? 0;
-        const bRelayerPriority = b.supportInfo.priority ?? 0;
+        // Preferred relayerType wins over the priority order (priorities >= 0).
+        const rank = ({ supportInfo }: AuthenticatorWithSupportInfo) =>
+          preferRelayerType && supportInfo.relayerType === preferRelayerType
+            ? -1
+            : supportInfo.priority ?? 0;
 
-        return aRelayerPriority - bRelayerPriority;
+        return rank(a) - rank(b);
       })
       .map(({ authenticator, supportInfo }) => ({
         authenticator,

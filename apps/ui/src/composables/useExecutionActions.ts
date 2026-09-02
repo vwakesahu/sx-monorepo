@@ -18,7 +18,6 @@ export const STARKNET_L1_EXECUTION_QUERY = gql`
   }
 `;
 
-const STRATEGIES_WITH_FINALIZE = ['Axiom'];
 const STRATEGIES_WITH_EXTERNAL_DETAILS = ['EthRelayer'];
 
 export function useExecutionActions(
@@ -35,7 +34,7 @@ export function useExecutionActions(
   const message: Ref<string | null> = ref(null);
   const warningMessage: Ref<string | null> = ref(null);
   const executionNetwork = ref<Network>(getNetwork(toValue(proposal).network));
-  const finalizeProposalSending = ref(false);
+  const revealResultsSending = ref(false);
   const executeProposalSending = ref(false);
   const executeQueuedProposalSending = ref(false);
   const vetoProposalSending = ref(false);
@@ -54,11 +53,14 @@ export function useExecutionActions(
   }, 1000);
 
   const network = computed(() => getNetwork(toValue(proposal).network));
-  const hasFinalize = computed(
-    () =>
-      STRATEGIES_WITH_FINALIZE.includes(toValue(execution).strategyType) &&
-      !toValue(proposal).execution_ready
-  );
+  const isPendingConfidentialReveal = computed(() => {
+    const proposalValue = toValue(proposal);
+
+    return (
+      proposalValue.space.protocol === 'snapshot-x-inco' &&
+      proposalValue.quorum_reached == null
+    );
+  });
   const hasExecuteQueued = computed(() => {
     const executionValue = toValue(execution);
     const proposalValue = toValue(proposal);
@@ -138,13 +140,13 @@ export function useExecutionActions(
     }
   }
 
-  async function finalizeProposal() {
-    finalizeProposalSending.value = true;
+  async function revealResults() {
+    revealResultsSending.value = true;
 
     try {
-      await actions.finalizeProposal(toValue(proposal));
+      await actions.revealResults(toValue(proposal));
     } finally {
-      finalizeProposalSending.value = false;
+      revealResultsSending.value = false;
     }
   }
 
@@ -208,19 +210,19 @@ export function useExecutionActions(
   );
 
   return {
-    hasFinalize,
     hasExecuteQueued,
+    isPendingConfidentialReveal,
     fetchingDetails,
     message,
     warningMessage,
     executionTx,
     executionTxUrl,
-    finalizeProposalSending,
+    revealResultsSending,
     executeProposalSending,
     executeQueuedProposalSending,
     vetoProposalSending,
     executionCountdown,
-    finalizeProposal,
+    revealResults,
     executeProposal,
     executeQueuedProposal,
     vetoProposal

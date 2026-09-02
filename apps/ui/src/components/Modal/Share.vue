@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { PayloadType, Vote } from '@/composables/useSharing';
-import { AuctionNetworkId, SellOrder } from '@/helpers/auction';
 import { getNetwork } from '@/networks';
 import { NetworkID } from '@/types';
 
@@ -12,8 +11,8 @@ type Messages = {
 const props = withDefaults(
   defineProps<{
     open: boolean;
-    shareable: Vote | SellOrder;
-    network: NetworkID | AuctionNetworkId;
+    shareable: Vote;
+    network: NetworkID;
     type: PayloadType;
     txId: string | null;
     messages?: Messages;
@@ -38,8 +37,12 @@ watch(
   async (to, from) => {
     if (props.type !== 'vote') return;
 
-    if (props.open && (to as Vote).proposal.id !== (from as Vote)?.proposal.id)
+    if (
+      props.open &&
+      (to as Vote).proposal.id !== (from as Vote)?.proposal.id
+    ) {
       emit('close');
+    }
   },
   { immediate: true }
 );

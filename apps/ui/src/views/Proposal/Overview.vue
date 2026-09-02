@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useQueryClient } from '@tanstack/vue-query';
 import { EVM_EMPTY_ADDRESS } from '@/helpers/constants';
+import { getExecutionKey } from '@/helpers/ui';
 import {
   _n,
   compareAddresses,
@@ -166,7 +167,10 @@ async function handleEditClick() {
         ? execution.safeAddress
         : props.proposal.execution_strategy;
 
-      return [address, execution.transactions];
+      return [
+        getExecutionKey(execution.chainId, address),
+        execution.transactions
+      ];
     })
   );
 
@@ -206,7 +210,10 @@ async function handleDuplicateClick() {
         ? execution.safeAddress
         : props.proposal.execution_strategy;
 
-      return [address, execution.transactions];
+      return [
+        getExecutionKey(execution.chainId, address),
+        execution.transactions
+      ];
     })
   );
 
@@ -303,8 +310,9 @@ async function handleAiSpeechClick() {
   try {
     await fetchAiSpeech();
 
-    if (aiSpeechState.value.errored || aiSpeechContent.value === null)
+    if (aiSpeechState.value.errored || aiSpeechContent.value === null) {
       throw new Error();
+    }
 
     await initAudio(aiSpeechContent.value);
     playAudio();
@@ -383,6 +391,7 @@ onBeforeUnmount(() => destroyAudio());
           <div class="flex flex-col ml-2 leading-4 gap-1">
             <div>
               {{ proposal.author.name || shortenAddress(proposal.author.id) }}
+              <UiBadgeApp :app="proposal.app" />
               <UiPill
                 v-if="proposal.author.role"
                 :label="proposal.author.role"

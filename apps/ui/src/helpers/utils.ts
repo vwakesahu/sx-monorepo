@@ -1,5 +1,5 @@
 import { sanitizeUrl as baseSanitizeUrl } from '@braintree/sanitize-url';
-import { FunctionFragment } from '@ethersproject/abi';
+import { FormatTypes, FunctionFragment } from '@ethersproject/abi';
 import { getAddress, isAddress } from '@ethersproject/address';
 import { namehash } from '@ethersproject/hash';
 import { upload as pin } from '@snapshot-labs/pineapple';
@@ -75,10 +75,12 @@ export function getUrl(uri: string) {
   }
 
   const uriScheme = uri.split('://')[0];
-  if (uriScheme === 'ipfs')
+  if (uriScheme === 'ipfs') {
     return uri.replace('ipfs://', `${ipfsGateway}/ipfs/`);
-  if (uriScheme === 'ipns')
+  }
+  if (uriScheme === 'ipns') {
     return uri.replace('ipns://', `${ipfsGateway}/ipns/`);
+  }
   return uri;
 }
 
@@ -105,15 +107,20 @@ export function shorten(
   if (key === 'symbol') limit = MAX_SYMBOL_LENGTH;
   if (key === 'name') limit = 64;
   if (key === 'choice') limit = 12;
-  if (limit)
+  if (limit) {
     return str.length > limit ? `${str.slice(0, limit).trim()}...` : str;
+  }
   return shortenAddress(str);
 }
 
 export function formatAddress(address: string) {
   try {
+    // Lowercase EVM addresses before checksumming so a mixed-case input with a
+    // malformed EIP-55 checksum still resolves (getAddress re-derives the
+    // canonical checksum) instead of throwing and falling through to the
+    // Starknet path, which would zero-pad it to 64 chars.
     return address.length === 42
-      ? getAddress(address)
+      ? getAddress(address.toLowerCase())
       : validateAndParseAddress(address);
   } catch {
     return address;
@@ -309,7 +316,11 @@ export function abiToDefinition(abi: FunctionFragment, chainId?: ChainId) {
         definition.properties[inputName].chainId = chainId;
       }
     }
-    if (input.type.endsWith('[]')) {
+    if (input.type.includes('tuple')) {
+      definition.properties[inputName].format = 'long';
+      definition.properties[inputName].abiType = input.format(FormatTypes.full);
+      definition.properties[inputName].examples = ['{ "key": "value" }'];
+    } else if (input.type.endsWith('[]')) {
       definition.properties[inputName].format = input.type;
       definition.properties[inputName].examples = ['0x0, 0x1'];
     }
@@ -652,6 +663,19 @@ export function getChoiceText(availableChoices: string[], choice: Choice) {
         `${_p(weight / total)} for ${availableChoices[Number(index) - 1]}`
     )
     .join(', ');
+}
+
+export function escapeHtml(text: string | null | undefined) {
+  return (text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export function replaceNamePlaceholder(title: string, name: string) {
+  return title.replace('<b>_NAME_</b>', () => `<b>${escapeHtml(name)}</b>`);
 }
 
 export function autoLinkText(text: string) {

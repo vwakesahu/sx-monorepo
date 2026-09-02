@@ -454,7 +454,9 @@ export function createActions(
       account: string,
       proposal: Proposal,
       choice: Choice,
-      reason: string
+      reason: string,
+      app: string,
+      isTxPreferred?: boolean
     ) => {
       const isContract = await getIsContract(connectorType, account);
 
@@ -464,6 +466,8 @@ export function createActions(
         starkProvider
       );
 
+      const preferRelayerType = isTxPreferred ? 'evm-tx' : undefined;
+
       const { relayerType, authenticator, strategies } =
         pickAuthenticatorAndStrategies({
           authenticators: proposal.space.authenticators,
@@ -472,7 +476,12 @@ export function createActions(
           connectorType,
           isContract,
           hasReason: !!reason,
-          ignoreRelayer: !relayer?.hasMinimumBalance
+          // The preferred (evm-tx) authenticator is relayer-typed but sends a
+          // real transaction, so it must not be filtered out as relayer-backed.
+          ignoreRelayer: preferRelayerType
+            ? false
+            : !relayer?.hasMinimumBalance,
+          preferRelayerType
         });
 
       if (relayerType && ['evm', 'evm-tx'].includes(relayerType)) {
@@ -532,7 +541,7 @@ export function createActions(
         data
       });
     },
-    finalizeProposal: () => null,
+    revealResults: () => null,
     executeTransactions: async (web3: any, proposal: Proposal) => {
       const executionData = getExecutionData(
         proposal.space,
@@ -565,8 +574,9 @@ export function createActions(
       });
     },
     executeQueuedProposal: async (web3: any, proposal: Proposal) => {
-      if (!proposal.execution_destination)
+      if (!proposal.execution_destination) {
         throw new Error('Execution destination is missing');
+      }
 
       const activeVotingStrategies = proposal.strategies_indices.reduce(
         (acc, index) => {
@@ -813,7 +823,7 @@ export function createActions(
       return Promise.all(
         strategiesAddresses.map(async (address, i) => {
           const strategy = getStarknetStrategy(address, networkConfig);
-          if (!strategy)
+          if (!strategy) {
             return {
               address,
               value: 0n,
@@ -822,6 +832,7 @@ export function createActions(
               token: null,
               symbol: ''
             };
+          }
 
           const strategyMetadata = await parseStrategyMetadata(
             strategiesMetadata[i].payload
@@ -853,9 +864,13 @@ export function createActions(
     followSpace: () => {},
     unfollowSpace: () => {},
     setAlias: async () => {},
+    revokeAlias: async () => {},
     updateUser: () => {},
     updateStatement: () => {},
     updateSettingsRaw: () => {
+      throw new Error('Not implemented');
+    },
+    getUpdateSettingsTransaction: () => {
       throw new Error('Not implemented');
     },
     createSpaceRaw: () => {

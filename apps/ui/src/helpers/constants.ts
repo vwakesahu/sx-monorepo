@@ -16,6 +16,11 @@ export const API_URL =
 export const API_TESTNET_URL =
   import.meta.env.VITE_API_TESTNET_URL ?? 'https://testnet-api.snapshot.box';
 
+export const SCHNAPS_URLS: Record<string, string> = {
+  s: 'https://schnaps.snapshot.box',
+  's-tn': 'https://testnet-schnaps.snapshot.box'
+};
+
 export const DOCS_URL = 'https://docs.snapshot.box';
 
 export const VERIFIED_URL = `${DOCS_URL}/user-guides/spaces/get-verified`;
@@ -39,6 +44,7 @@ export const CHAIN_IDS: Record<Exclude<NetworkID, 's' | 's-tn'>, ChainId> = {
   ape: 33139,
   curtis: 33111,
   sep: 11155111,
+  basesep: 84532,
   // Starknet
   sn: '0x534e5f4d41494e',
   'sn-sep': '0x534e5f5345504f4c4941'
@@ -185,6 +191,11 @@ export const PRIVACY_TYPES_INFO: Record<
     description:
       'Choices are encrypted and only visible once the voting period is over.'
   },
+  inco: {
+    label: 'Confidential voting',
+    description:
+      'Choices stay encrypted onchain; only final tallies are revealed once the voting period is over.'
+  },
   any: {
     label: 'Any',
     description: 'Author can choose between no privacy and shielded voting.'
@@ -263,7 +274,8 @@ export const DELEGATE_REGISTRY_STRATEGIES = [
   'delegation-with-overrides',
   'with-delegation',
   'erc20-balance-of-with-delegation',
-  'spark-with-delegation'
+  'spark-with-delegation',
+  'grove-with-delegation'
 ];
 
 export const DELEGATION_TYPES_NAMES: Record<DelegationType, string> = {

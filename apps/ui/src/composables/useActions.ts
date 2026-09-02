@@ -1,4 +1,5 @@
 import { Web3Provider } from '@ethersproject/providers';
+import { ProtocolID } from '@snapshot-labs/sx';
 import { getDelegationNetwork } from '@/helpers/delegation';
 import { registerTransaction } from '@/helpers/mana';
 import { getUserFacingErrorMessage, isUserAbortError } from '@/helpers/utils';
@@ -194,6 +195,7 @@ export function useActions() {
 
   async function predictSpaceAddress(
     networkId: NetworkID,
+    protocol: ProtocolID,
     salt: string
   ): Promise<string | null> {
     if (!auth.value) {
@@ -202,11 +204,15 @@ export function useActions() {
     }
 
     const network = getReadWriteNetwork(networkId);
-    return network.actions.predictSpaceAddress(auth.value.provider, { salt });
+    return network.actions.predictSpaceAddress(auth.value.provider, {
+      protocol,
+      salt
+    });
   }
 
   async function deployDependency(
     networkId: NetworkID,
+    protocol: ProtocolID,
     controller: string,
     spaceAddress: string,
     dependencyConfig: StrategyConfig
@@ -221,6 +227,7 @@ export function useActions() {
       auth.value.provider,
       auth.value.connector.type,
       {
+        protocol,
         controller,
         spaceAddress,
         strategy: dependencyConfig
@@ -230,6 +237,7 @@ export function useActions() {
 
   async function createSpace(
     networkId: NetworkID,
+    protocol: ProtocolID,
     salt: string,
     metadata: SpaceMetadata,
     settings: SpaceSettings,
@@ -256,6 +264,7 @@ export function useActions() {
       auth.value.provider,
       salt,
       {
+        protocol,
         controller,
         votingDelay: getCurrentFromDuration(networkId, settings.votingDelay),
         minVotingDuration: getCurrentFromDuration(
@@ -307,7 +316,8 @@ export function useActions() {
     proposal: Proposal,
     choice: Choice,
     reason: string,
-    app: string
+    app: string,
+    isTxPreferred?: boolean
   ): Promise<string | null> {
     if (!auth.value) {
       await forceLogin();
@@ -326,7 +336,8 @@ export function useActions() {
         proposal,
         choice,
         reason,
-        app
+        app,
+        isTxPreferred
       ),
       {
         safeAppContext: 'vote'
@@ -485,17 +496,19 @@ export function useActions() {
     return true;
   }
 
-  async function finalizeProposal(proposal: Proposal) {
+  async function revealResults(proposal: Proposal) {
     if (!auth.value) return await forceLogin();
 
-    if (auth.value.connector.type === 'argentx')
-      throw new Error('ArgentX is not supported');
-
     const network = getReadWriteNetwork(proposal.network);
+    if (!network.managerConnectors.includes(auth.value.connector.type)) {
+      throw new Error(
+        `${auth.value.connector.type} is not supported for this action`
+      );
+    }
 
     await wrapPromise(
       proposal.network,
-      network.actions.finalizeProposal(auth.value.provider, proposal)
+      network.actions.revealResults(auth.value.provider, proposal)
     );
   }
 
@@ -537,8 +550,9 @@ export function useActions() {
   async function vetoProposal(proposal: Proposal) {
     if (!auth.value) return await forceLogin();
 
-    if (auth.value.connector.type === 'argentx')
+    if (auth.value.connector.type === 'argentx') {
       throw new Error('ArgentX is not supported');
+    }
 
     const network = getReadWriteNetwork(proposal.network);
 
@@ -620,6 +634,42 @@ export function useActions() {
           ? getCurrentFromDuration(space.network, maxVotingDuration)
           : null
       )
+    );
+  }
+
+  async function getUpdateSettingsTransaction(
+    space: Space,
+    metadata: SpaceMetadata,
+    authenticatorsToAdd: StrategyConfig[],
+    authenticatorsToRemove: number[],
+    votingStrategiesToAdd: StrategyConfig[],
+    votingStrategiesToRemove: number[],
+    validationStrategy: StrategyConfig,
+    executionStrategies: StrategyConfig[],
+    votingDelay: number | null,
+    minVotingDuration: number | null,
+    maxVotingDuration: number | null
+  ) {
+    const network = getReadWriteNetwork(space.network);
+
+    return network.actions.getUpdateSettingsTransaction(
+      space,
+      metadata,
+      authenticatorsToAdd,
+      authenticatorsToRemove,
+      votingStrategiesToAdd,
+      votingStrategiesToRemove,
+      validationStrategy,
+      executionStrategies,
+      votingDelay !== null
+        ? getCurrentFromDuration(space.network, votingDelay)
+        : null,
+      minVotingDuration !== null
+        ? getCurrentFromDuration(space.network, minVotingDuration)
+        : null,
+      maxVotingDuration !== null
+        ? getCurrentFromDuration(space.network, maxVotingDuration)
+        : null
     );
   }
 
@@ -815,12 +865,13 @@ export function useActions() {
     updateProposal: wrapWithErrors(updateProposal),
     flagProposal: wrapWithErrors(flagProposal),
     cancelProposal: wrapWithErrors(cancelProposal),
-    finalizeProposal: wrapWithErrors(finalizeProposal),
+    revealResults: wrapWithErrors(revealResults),
     executeTransactions: wrapWithErrors(executeTransactions),
     executeQueuedProposal: wrapWithErrors(executeQueuedProposal),
     vetoProposal: wrapWithErrors(vetoProposal),
     transferOwnership: wrapWithErrors(transferOwnership),
     updateSettings: wrapWithErrors(updateSettings),
+    getUpdateSettingsTransaction: wrapWithErrors(getUpdateSettingsTransaction),
     updateSettingsRaw: wrapWithErrors(updateSettingsRaw),
     deleteSpace: wrapWithErrors(deleteSpace),
     delegate: wrapWithErrors(delegate),
@@ -828,6 +879,7 @@ export function useActions() {
     followSpace: wrapWithErrors(followSpace),
     unfollowSpace: wrapWithErrors(unfollowSpace),
     updateUser: wrapWithErrors(updateUser),
-    updateStatement: wrapWithErrors(updateStatement)
+    updateStatement: wrapWithErrors(updateStatement),
+    getAliasSigner: wrapWithErrors(getAliasSigner)
   };
 }

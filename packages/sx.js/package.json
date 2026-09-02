@@ -30,7 +30,7 @@
     "prepublishOnly": "bun run lint",
     "node:evm": "anvil",
     "node:starknet": "starknet-devnet --seed 1",
-    "test": "SEPOLIA_NODE_URL=https://rpc.snapshot.org/11155111 vitest run test/unit",
+    "test": "vitest run test/unit",
     "test:integration": "./test/run-integration-tests.sh",
     "test:integration:starknet": "vitest run test/integration/starknet",
     "test:integration:evm": "vitest run test/integration/evm",
@@ -54,16 +54,23 @@
     "@openzeppelin/merkle-tree": "^1.0.5",
     "@shutter-network/shutter-crypto": "1.0.1",
     "bn.js": "^5.2.1",
-    "micro-starknet": "^0.2.3",
     "randombytes": "^2.1.0",
     "starknet": "7.6.4"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.1",
-    "@types/node": "^22.6.0",
+    "@types/node": "^24",
     "@types/randombytes": "^2.0.3",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "@inco/lightning-js": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@inco/lightning-js": {
+      "optional": true
+    }
   },
   "files": [
     "dist/**/*",

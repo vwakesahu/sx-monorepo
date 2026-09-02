@@ -1,21 +1,24 @@
 <script setup lang="ts">
 import { getUrl } from '@/helpers/utils';
-import { enabledReadWriteNetworks, getNetwork } from '@/networks';
+import { getNetwork } from '@/networks';
 import { NetworkID } from '@/types';
 
 const model = defineModel<NetworkID>({
   required: true
 });
 
-defineProps<{
+const props = defineProps<{
   title: string;
   description?: string;
+  spaceCreationNetworks: NetworkID[];
 }>();
 
-const availableNetworks = enabledReadWriteNetworks.map(id => {
-  const { name, avatar, readOnly } = getNetwork(id);
-  return { id, name, avatar, readOnly };
-});
+const availableNetworks = computed(() =>
+  props.spaceCreationNetworks.map(id => {
+    const { name, avatar, readOnly } = getNetwork(id);
+    return { id, name, avatar, readOnly };
+  })
+);
 </script>
 
 <template>

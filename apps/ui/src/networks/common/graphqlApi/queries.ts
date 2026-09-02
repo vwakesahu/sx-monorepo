@@ -91,6 +91,7 @@ gql(`
     authenticators
     proposal_count
     vote_count
+    active_proposal_count
     created
   }
 
@@ -153,11 +154,12 @@ gql(`
     execution_tx
     veto_tx
     vote_count
-    execution_ready
     executed
     vetoed
     execution_settled
     cancelled
+    quorum_reached
+    support_achieved
   }
 `);
 

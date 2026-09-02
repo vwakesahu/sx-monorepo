@@ -4,6 +4,7 @@ import {
   evmApe,
   evmArbitrum,
   evmBase,
+  evmBaseSepolia,
   evmBnb,
   evmBnbt,
   evmCurtis,
@@ -45,7 +46,8 @@ const NETWORKS = new Map<number, EvmNetworkConfig>([
   [1, evmMainnet],
   [33139, evmApe],
   [33111, evmCurtis],
-  [11155111, evmSepolia]
+  [11155111, evmSepolia],
+  [84532, evmBaseSepolia]
 ]);
 
 export const NETWORK_IDS = new Map<number, string>(
@@ -72,6 +74,12 @@ export const createNetworkHandler = (chainId: number) => {
 
   async function send(id: number, params: any, res: Response) {
     try {
+      // Confidential (Inco) votes are payable and never relayed — a crafted
+      // envelope could otherwise drain the relayer wallet via msg.value.
+      if (params.envelope?.data?.ciphertext) {
+        throw new Error('Confidential votes cannot be relayed');
+      }
+
       const { signatureData } = params.envelope;
       const { types, domain } = signatureData;
       let receipt;
@@ -118,35 +126,6 @@ export const createNetworkHandler = (chainId: number) => {
       return rpcSuccess(res, receipt, id);
     } catch (err) {
       logger.error({ err }, 'Failed to broadcast transaction');
-      return rpcError(res, 500, err, id);
-    }
-  }
-
-  async function finalizeProposal(id: number, params: any, res: Response) {
-    try {
-      const { space, proposalId } = params;
-
-      const response = await fetch(
-        'http://ec2-44-197-171-215.compute-1.amazonaws.com:8000/query',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chainId,
-            space,
-            proposalId,
-            feeData: {
-              maxFeePerGas: '50000000000'
-            }
-          })
-        }
-      );
-
-      const result = await response.text();
-
-      return rpcSuccess(res, result, id);
-    } catch (err) {
-      logger.error({ err }, 'Failed to finalize proposal');
       return rpcError(res, 500, err, id);
     }
   }
@@ -335,7 +314,6 @@ export const createNetworkHandler = (chainId: number) => {
 
   return {
     send,
-    finalizeProposal,
     execute,
     executeQueuedProposal,
     executeStarknetProposal,

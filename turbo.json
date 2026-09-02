@@ -4,7 +4,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build", "codegen", "api#codegen", "highlight#codegen"],
-      "outputs": ["dist/**", "dist.cjs/**"],
+      "outputs": ["dist/**", "dist.cjs/**", "build/**"],
       "env": ["ELECTRON"]
     },
     "build:electron": {
@@ -36,9 +36,6 @@
       "passThroughEnv": [
         "UI_URL",
         "ENABLED_NETWORKS",
-        "ENABLE_SNAPSHOT_X",
-        "ENABLE_GOVERNOR_BRAVO",
-        "ENABLE_OPENZEPPELIN",
         "HYPERSYNC_API_TOKEN",
         "VITE_MANA_URL"
       ]
@@ -52,14 +49,19 @@
       "outputs": [
         ".checkpoint/**",
         "src/networks/common/graphqlApi/gql/**",
+        "src/networks/offchain/api/gql/**",
         "src/helpers/auction/gql/**",
         "src/helpers/auction/referral/gql/**",
         "src/helpers/townhall/gql/**"
       ],
       "inputs": [
         "**/*.gql",
+        "../api/.checkpoint/schema.gql",
+        "../hub/src/graphql/schema.gql",
+        "../highlight/.checkpoint/schema.gql",
         "codegen.ts",
         "src/networks/common/graphqlApi/queries.ts",
+        "src/networks/offchain/api/queries.ts",
         "src/helpers/auction/queries.ts",
         "src/helpers/auction/referral/queries.ts",
         "src/helpers/townhall/api.ts"
